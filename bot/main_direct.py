@@ -1,5 +1,5 @@
 """
-Supreme AI Bot - Prefix Command Version (!) with Deep Debugging
+Supreme AI Bot - Absolute Diagnostic Version
 """
 import discord
 from discord.ext import commands
@@ -14,21 +14,21 @@ from config import Config
 from memory import TrainingDatabase
 from ai.groq_client import GroqClient
 
-# Configure logging to be very verbose for debugging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
+# Force logging to be extremely loud
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+root_logger.addHandler(handler)
+
 logger = logging.getLogger(__name__)
 
 class SupremeAIBot(commands.Bot):
     def __init__(self):
         prefix = Config.BOT_PREFIX if Config.BOT_PREFIX else "!"
-        
-        # CRITICAL: Ensure all intents are enabled
         intents = discord.Intents.all() 
         
+        print(f"DEBUG: Initializing bot with prefix '{prefix}' and all intents")
         super().__init__(command_prefix=prefix, intents=intents, help_command=None)
         
         self.db = TrainingDatabase(Config.DB_PATH)
@@ -36,62 +36,53 @@ class SupremeAIBot(commands.Bot):
         self.groq_ready = False
 
     async def setup_hook(self):
-        print(f"🚀 Starting Bot Setup (Prefix: {self.command_prefix})...")
-        logger.info(f"Intents configured: {self.intents}")
-        
-        # Import and setup prefix commands
+        print("DEBUG: setup_hook started")
         from commands_v2 import setup_commands
         setup_commands(self)
         
-        # Load listener
         try:
             from ticket_listener import TicketListener
             await self.add_cog(TicketListener(self))
-            print("✓ Ticket listener loaded")
+            print("DEBUG: TicketListener cog added")
         except Exception as e:
-            print(f"✗ Listener failed: {e}")
+            print(f"DEBUG: Failed to add TicketListener: {e}")
 
     async def on_ready(self):
-        print(f"✅ Logged in as {self.user} (ID: {self.user.id})")
-        print(f"✅ Ready for prefix commands using '{self.command_prefix}'")
-        print(f"✅ Bot is in {len(self.guilds)} guilds")
+        print(f"DEBUG: LOGGED IN AS {self.user} (ID: {self.user.id})")
+        print(f"DEBUG: GUILDS: {len(self.guilds)}")
+        for guild in self.guilds:
+            print(f"DEBUG: - Connected to Guild: {guild.name} (ID: {guild.id})")
         
         self.groq_ready = await self.ai.check_health()
-        
-        await self.change_presence(
-            activity=discord.Activity(
-                type=discord.ActivityType.watching, 
-                name=f"tickets | {self.command_prefix}help"
-            )
-        )
+        print(f"DEBUG: Groq Ready: {self.groq_ready}")
 
     async def on_message(self, message):
-        # Log EVERY message the bot sees
+        # ABSOLUTE LOGGING: This will print for EVERY message the bot can see
+        print(f"DEBUG: [MESSAGE] Author: {message.author} | Content: '{message.content}' | Channel: {message.channel}")
+        
         if message.author == self.user:
             return
-            
-        logger.debug(f"📩 Message received: '{message.content}' from {message.author} in {message.channel}")
-        
-        # Check if it starts with prefix
+
+        # Check if prefix is detected
         if message.content.startswith(self.command_prefix):
-            logger.info(f"🎯 Command detected: {message.content}")
+            print(f"DEBUG: [PREFIX DETECTED] '{message.content}'")
         
-        # Process commands
         await self.process_commands(message)
 
     async def on_command(self, ctx):
-        logger.info(f"🏃 Executing command: {ctx.command.name} by {ctx.author}")
-
-    async def on_command_completion(self, ctx):
-        logger.info(f"✅ Command completed: {ctx.command.name}")
+        print(f"DEBUG: [COMMAND START] {ctx.command.name} by {ctx.author}")
 
     async def on_command_error(self, ctx, error):
+        print(f"DEBUG: [COMMAND ERROR] {error}")
         if isinstance(error, commands.CommandNotFound):
-            logger.warning(f"❓ Unknown command: {ctx.message.content}")
-            # Optional: reply to user
-            # await ctx.send(f"Unknown command. Type `{self.command_prefix}help` for help.")
-            return
-            
-        logger.error(f"❌ Command Error in {ctx.command}: {error}")
+            print(f"DEBUG: Command not found: {ctx.message.content}")
+        else:
+            traceback.print_exc()
+            try:
+                await ctx.send(f"❌ Error: {str(error)}")
+            except:
+                print("DEBUG: Could not send error message to Discord")
+
+    async def on_error(self, event, *args, **kwargs):
+        print(f"DEBUG: [GENERAL ERROR] Event: {event}")
         traceback.print_exc()
-        await ctx.send(f"❌ An error occurred: {str(error)}")
