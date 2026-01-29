@@ -1,0 +1,64 @@
+SUPREME AI BOT - COMMAND REGISTRATION FIX
+==========================================
+
+PROBLEM:
+--------
+Discord slash commands were not automatically registering when deployed to Koyeb.
+Commands would take up to 1 hour to appear because only global sync was used.
+
+FILES MODIFIED:
+--------------
+1. bot/main_direct.py
+   - Added guild-specific command sync for instant registration
+   - Commands now appear immediately when DISCORD_GUILD_ID is set
+   - Maintains global sync as fallback
+   - Enhanced logging and error handling
+
+2. bot/commands_v2.py
+   - Added /sync command for manual command re-sync
+   - Admin-only command for troubleshooting
+   - Better error messages
+
+NEW FILES:
+----------
+3. COMMAND_REGISTRATION_FIX.md
+   - Complete documentation of the fix
+   - Deployment instructions for Koyeb
+   - Troubleshooting guide
+
+KEY CHANGES:
+------------
+✓ Guild-specific sync for instant command registration
+✓ Fallback to global sync if guild sync fails
+✓ Manual /sync command for troubleshooting
+✓ Better logging to track command registration
+✓ Lists all guilds bot is in on startup
+
+REQUIRED ENVIRONMENT VARIABLE:
+------------------------------
+DISCORD_GUILD_ID=your_server_id_here
+
+This MUST be set in Koyeb for instant command registration!
+
+COMMANDS AVAILABLE:
+-------------------
+/train add      - Add training data
+/train list     - List training data
+/train stats    - Show statistics
+/train delete   - Delete training entry
+/ticket info    - Get ticket information
+/ticket close   - Close a ticket
+/sync           - Manual command sync (admin only)
+
+HOW TO DEPLOY:
+--------------
+1. Set DISCORD_GUILD_ID in Koyeb environment variables
+2. Push code to GitHub
+3. Redeploy on Koyeb
+4. Commands appear instantly in your Discord server!
+
+VERIFICATION:
+-------------
+Check Koyeb logs for:
+✓ Synced X commands to guild XXXXXX (instant)
+✅ Bot is ready and commands are registered!

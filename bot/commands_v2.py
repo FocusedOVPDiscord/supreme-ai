@@ -107,11 +107,43 @@ class TicketGroup(app_commands.Group):
 def setup_commands(bot):
     """Setup all commands"""
     print("Setting up commands...")
+    logger.info("Setting up commands...")
+    
+    # Create command groups
     train_group = TrainGroup(bot)
     ticket_group = TicketGroup(bot)
     
+    # Add groups to command tree
     bot.tree.add_command(train_group)
     bot.tree.add_command(ticket_group)
     
-    print("Commands setup complete")
+    # Add standalone sync command for manual re-sync
+    @bot.tree.command(name="sync", description="Manually sync slash commands (Admin only)")
+    @app_commands.default_permissions(administrator=True)
+    async def sync_commands(interaction: discord.Interaction):
+        """Manual command sync for troubleshooting"""
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Sync to current guild
+            if interaction.guild:
+                bot.tree.copy_global_to(guild=interaction.guild)
+                synced = await bot.tree.sync(guild=interaction.guild)
+                await interaction.followup.send(
+                    f"✓ Synced {len(synced)} commands to this server:\n" + 
+                    "\n".join([f"• /{cmd.name}" for cmd in synced]),
+                    ephemeral=True
+                )
+            else:
+                # Sync globally
+                synced = await bot.tree.sync()
+                await interaction.followup.send(
+                    f"✓ Synced {len(synced)} commands globally (may take up to 1 hour)",
+                    ephemeral=True
+                )
+        except Exception as e:
+            await interaction.followup.send(f"❌ Sync failed: {e}", ephemeral=True)
+            logger.error(f"Manual sync failed: {e}")
+    
+    print("✓ Commands setup complete")
     logger.info("✓ Commands setup complete")
