@@ -37,5 +37,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD python -c "import sys; sys.exit(0)" || exit 1
 
-# Run bot
-CMD ["python", "-u", "bot/koyeb_run.py"]
+# Run bot using Procfile
+CMD exec python bot/koyeb_run.py
