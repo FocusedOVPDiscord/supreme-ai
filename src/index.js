@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, REST, Routes, Events, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, REST, Routes, Events, ChannelType, EmbedBuilder } = require('discord.js');
 const db = require('./utils/database');
 const ai = require('./utils/ai');
 const commandsList = require('./commands');
@@ -26,122 +26,58 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 async function registerCommands() {
     try {
-        console.log('🔄 Registering slash commands...');
         if (process.env.DISCORD_GUILD_ID) {
-            await rest.put(
-                Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID),
-                { body: commandsData }
-            );
-            console.log(`✅ Synced commands to guild ${process.env.DISCORD_GUILD_ID}`);
+            await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: commandsData });
         } else {
-            await rest.put(
-                Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
-                { body: commandsData }
-            );
-            console.log('✅ Synced commands globally');
+            await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: commandsData });
         }
-    } catch (error) {
-        console.error('❌ Command registration error:', error);
-    }
+    } catch (error) { console.error('Command registration error:', error); }
 }
 
 client.once(Events.ClientReady, async () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
-    console.log(`📊 Connected to ${client.guilds.cache.size} guilds`);
+    console.log(`✅ [SUPREME AI] Online as ${client.user.tag}`);
     await registerCommands();
 });
 
-client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
-    try {
-        await command.execute(interaction);
-    } catch (error) {
-        console.error(error);
-        const errorMessage = '❌ Error executing command!';
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: errorMessage, ephemeral: true });
-        } else {
-            await interaction.reply({ content: errorMessage, ephemeral: true });
-        }
-    }
-});
-
-// Enhanced ticket detection - supports any ticket channel format
+// Helper: Ticket Channel Detection
 function isTicketChannel(channel) {
-    if (!channel) return false;
-    
-    // Check if it's a text channel or thread
-    const validTypes = [ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread];
-    if (!validTypes.includes(channel.type)) {
-        // console.log(`[DEBUG] Channel ${channel.name} is not a valid type: ${channel.type}`);
-        return false;
-    }
-    
+    if (!channel || ![ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread].includes(channel.type)) return false;
     const name = channel.name.toLowerCase();
-    
-    // Common ticket patterns
-    const ticketPatterns = [
-        /ticket/i,                 // any channel with "ticket" in name
-        /support/i,                // any channel with "support" in name
-        /help/i,                   // any channel with "help" in name
-        /claim/i,                  // any channel with "claim" in name
-        /^t-\d+$/i,                // t-0001
-        /^\d+$/                    // just numbers
-    ];
-    
-    const isMatch = ticketPatterns.some(pattern => pattern.test(name));
-    if (isMatch) {
-        console.log(`[DEBUG] Detected ticket channel: ${channel.name}`);
-    }
-    return isMatch;
+    return /ticket|support|help|claim|order|issue/i.test(name) || /^\d+$/.test(name);
 }
 
-// Get ticket ID from channel name
 function getTicketId(channelName) {
-    const name = channelName.toLowerCase();
-    
-    // Try to extract number-based ID
-    const match = name.match(/\d{4}/);
-    if (match) {
-        return `ticket-${match[0]}`;
-    }
-    
-    // Fallback to full channel name
-    return name;
+    const match = channelName.toLowerCase().match(/\d+/);
+    return match ? `ticket-${match[0]}` : channelName.toLowerCase();
 }
 
-// AI Ticket Bot Style - Auto Greeting on Channel Creation
+// --- AI TICKET BOT FEATURES ---
+
+// 1. Instant Welcome & Intent Selection
 client.on(Events.ChannelCreate, async channel => {
     if (!isTicketChannel(channel)) return;
     
     setTimeout(async () => {
         try {
-            const permissions = channel.permissionsFor(client.user);
-            if (!permissions || !permissions.has(['ViewChannel', 'SendMessages'])) return;
-
             const welcomeEmbed = new EmbedBuilder()
-                .setTitle('🎫 Support Ticket Opened')
-                .setDescription('Hello! I am the **Supreme AI Assistant**. I\'ve been notified of your ticket.\n\nWhile you wait for a staff member, please **describe your issue in detail** below. I will try to provide an instant solution based on our knowledge base!')
-                .setColor(0x3498db)
-                .setFooter({ text: 'AI Support Powered by Groq' })
+                .setTitle('👋 Welcome to Support')
+                .setDescription('Hello! I am the **AI Support Assistant**. I\'ve been assigned to your ticket to provide instant help.\n\n**How I can help you today:**\n- ⚡ Provide instant answers from our knowledge base\n- 🛠️ Troubleshoot common technical issues\n- 📝 Collect details for our human staff\n\n**Please describe your request in detail below.**')
+                .setColor(0x5865F2)
+                .addFields({ name: 'Estimated AI Response Time', value: '⚡ Instant', inline: true })
+                .setFooter({ text: 'AI Support Powered by Groq Llama 3' })
                 .setTimestamp();
 
             await channel.send({ embeds: [welcomeEmbed] });
-            console.log(`✨ [AI TICKET] Sent welcome message in new ticket: ${channel.name}`);
-        } catch (err) {
-            console.error('Error sending ticket welcome:', err);
-        }
-    }, 2000); // Wait 2 seconds for other bots to finish setup
+        } catch (err) { console.error('Welcome message error:', err); }
+    }, 1500);
 });
 
+// 2. Proactive AI Response & Learning
 client.on(Events.MessageCreate, async message => {
-    if (message.author.bot) return;
-    if (!isTicketChannel(message.channel)) return;
+    if (message.author.bot || !isTicketChannel(message.channel)) return;
     
-    const permissions = message.channel.permissionsFor(client.user);
-    if (!permissions || !permissions.has(['ViewChannel', 'SendMessages', 'ReadMessageHistory'])) return;
+    const perms = message.channel.permissionsFor(client.user);
+    if (!perms || !perms.has(['ViewChannel', 'SendMessages', 'ReadMessageHistory'])) return;
     
     const ticketId = getTicketId(message.channel.name);
     db.addConversation(ticketId, message.author.id, message.content);
@@ -149,46 +85,34 @@ client.on(Events.MessageCreate, async message => {
     try {
         await message.channel.sendTyping();
         
-        // AI TICKET BOT LOGIC:
-        // 1. Check for specific trained triggers
-        // 2. Use Groq AI with the full context of the ticket
-        
+        // AITicketBot Logic: Knowledge Base First -> AI Fallback Second
         const match = db.searchSimilar(message.content);
         let response;
         
         if (match && match.response) {
             response = match.response;
             db.incrementUsage(match.id);
-            console.log(`✅ [TRAINED] Responding to "${message.content.substring(0, 20)}..."`);
         } else {
-            const history = db.getTicketHistory(ticketId, 6);
-            const contextMessages = history.map(h => `${h.is_ai ? 'Assistant' : 'Customer'}: ${h.message}`).join('\n');
-            
-            response = await ai.generateResponse(message.content, contextMessages);
+            const history = db.getTicketHistory(ticketId, 8);
+            const context = history.map(h => `${h.is_ai ? 'AI' : 'User'}: ${h.message}`).join('\n');
+            response = await ai.generateResponse(message.content, context);
         }
         
         if (response) {
-            // Use a clean, professional reply style like aiticketbot.com
-            await message.reply({ 
-                content: response, 
-                allowedMentions: { repliedUser: false } 
-            });
-            
+            // Check if AI resolved the issue (basic intent check)
+            const resolvedWords = ['resolved', 'fixed', 'thanks', 'thank you', 'solved'];
+            if (resolvedWords.some(w => message.content.toLowerCase().includes(w))) {
+                db.markResolvedByAI(ticketId);
+            }
+
+            await message.reply({ content: response, allowedMentions: { repliedUser: false } });
             db.addConversation(ticketId, client.user.id, response, 1);
         }
-    } catch (error) {
-        console.error('❌ Ticket Processing Error:', error);
-    }
+    } catch (error) { console.error('Processing error:', error); }
 });
 
-// Handle errors gracefully
-process.on('unhandledRejection', error => {
-    console.error('❌ Unhandled promise rejection:', error);
-});
+// 3. Error Protection
+process.on('unhandledRejection', error => console.error('Unhandled Rejection:', error));
+process.on('uncaughtException', error => console.error('Uncaught Exception:', error));
 
-process.on('uncaughtException', error => {
-    console.error('❌ Uncaught exception:', error);
-});
-
-// Login to Discord
 client.login(process.env.DISCORD_TOKEN);
