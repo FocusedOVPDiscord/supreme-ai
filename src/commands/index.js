@@ -78,7 +78,8 @@ const commands = [
                         .setTimestamp();
                     await interaction.reply({ embeds: [embed] });
                 } catch (error) {
-                    await interaction.reply({ content: '❌ Failed to add training data', ephemeral: true });
+                    console.error('❌ [TRAIN ERROR]', error);
+                    await interaction.reply({ content: `❌ Failed to add training data: ${error.message}`, ephemeral: true });
                 }
                 
             } else if (sub === 'list') {

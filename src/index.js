@@ -26,12 +26,17 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 async function registerCommands() {
     try {
+        console.log('📡 [COMMANDS] Starting auto-registration...');
         if (process.env.DISCORD_GUILD_ID) {
+            console.log(`📡 [COMMANDS] Registering for Guild: ${process.env.DISCORD_GUILD_ID}`);
             await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: commandsData });
+            console.log('✅ [COMMANDS] Guild commands registered!');
         } else {
+            console.log('📡 [COMMANDS] Registering GLOBALLY...');
             await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: commandsData });
+            console.log('✅ [COMMANDS] Global commands registered!');
         }
-    } catch (error) { console.error('Command registration error:', error); }
+    } catch (error) { console.error('❌ [COMMANDS] Registration error:', error); }
 }
 
 client.once(Events.ClientReady, async () => {
