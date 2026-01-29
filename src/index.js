@@ -26,14 +26,12 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 async function registerCommands() {
     try {
-        console.log('🔄 [BOT] Registering slash commands...');
         if (process.env.DISCORD_GUILD_ID) {
             await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: commandsData });
         } else {
             await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: commandsData });
         }
-        console.log('✅ [BOT] Slash commands registered successfully.');
-    } catch (error) { console.error('❌ [BOT] Command registration error:', error); }
+    } catch (error) { console.error('Command registration error:', error); }
 }
 
 client.once(Events.ClientReady, async () => {
@@ -55,7 +53,7 @@ function getTicketId(channelName) {
 
 // --- AI TICKET BOT FEATURES ---
 
-// 1. Instant Welcome & Intent Selection
+// 1. Instant Welcome
 client.on(Events.ChannelCreate, async channel => {
     if (!isTicketChannel(channel)) return;
     
@@ -77,10 +75,8 @@ client.on(Events.ChannelCreate, async channel => {
 // 2. Command Handling
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
-
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
-
     try {
         await command.execute(interaction);
     } catch (error) {
@@ -91,7 +87,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-// 3. Proactive AI Response & Learning
+// 3. Proactive AI Response & Flow Handling
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !isTicketChannel(message.channel)) return;
     
@@ -104,13 +100,47 @@ client.on(Events.MessageCreate, async message => {
     try {
         await message.channel.sendTyping();
         
-        // AITicketBot Logic: Knowledge Base First -> AI Fallback Second
+        // --- STEP-BY-STEP FLOW LOGIC ---
+        const state = db.getTicketState(ticketId);
+        
+        // If the user is currently in a flow (current_step_id is set)
+        if (state && state.current_step_id) {
+            const currentStep = db.getTrainingById(state.current_step_id);
+            
+            if (currentStep && currentStep.next_step_id) {
+                const nextStep = db.getTrainingById(currentStep.next_step_id);
+                if (nextStep) {
+                    // Update state to the next step
+                    db.updateTicketState(ticketId, nextStep.id);
+                    
+                    // Reply with the next question in the flow
+                    await message.reply({ content: nextStep.response, allowedMentions: { repliedUser: false } });
+                    db.addConversation(ticketId, client.user.id, nextStep.response, 1);
+                    return; // Exit early as we've handled the flow step
+                } else {
+                    // End of flow
+                    db.updateTicketState(ticketId, null);
+                }
+            } else {
+                // End of flow
+                db.updateTicketState(ticketId, null);
+            }
+        }
+        
+        // --- STANDARD KNOWLEDGE BASE / AI LOGIC ---
         const match = db.searchSimilar(message.content);
         let response;
         
         if (match && match.response) {
             response = match.response;
             db.incrementUsage(match.id);
+            
+            // If this match starts a flow (has a next_step_id)
+            if (match.next_step_id) {
+                db.updateTicketState(ticketId, match.id);
+                console.log(`🚀 [FLOW START] Ticket ${ticketId} started flow from training ID ${match.id}`);
+            }
+            
             console.log(`✅ [TRAINED] Matched: "${message.content.substring(0, 30)}..."`);
         } else {
             const history = db.getTicketHistory(ticketId, 8);
@@ -119,7 +149,6 @@ client.on(Events.MessageCreate, async message => {
         }
         
         if (response) {
-            // Check if AI resolved the issue (basic intent check)
             const resolvedWords = ['resolved', 'fixed', 'thanks', 'thank you', 'solved'];
             if (resolvedWords.some(w => message.content.toLowerCase().includes(w))) {
                 db.markResolvedByAI(ticketId);

@@ -5,7 +5,6 @@ const fs = require('fs');
 /**
  * DATABASE PERSISTENCE CONFIGURATION
  * We use /app/data/supreme_final.db which matches the Koyeb Volume mount path.
- * This ensures data is NOT lost on bot restarts.
  */
 const dbPath = '/app/data/supreme_final.db';
 const dbDir = path.dirname(dbPath);
@@ -22,7 +21,7 @@ if (!fs.existsSync(finalDbDir)) {
     }
 }
 
-// Open database and STRICTLY DISABLE foreign keys to prevent constraint crashes
+// Open database and STRICTLY DISABLE foreign keys
 const db = new Database(finalDbPath);
 db.pragma('foreign_keys = OFF');
 
@@ -33,6 +32,7 @@ db.exec(`
         query TEXT NOT NULL,
         response TEXT NOT NULL,
         category TEXT DEFAULT 'general',
+        next_step_id INTEGER, -- Link to another training ID for multi-step flows
         usage_count INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -42,6 +42,8 @@ db.exec(`
         user_id TEXT NOT NULL,
         category TEXT DEFAULT 'general',
         status TEXT DEFAULT 'open',
+        current_step_id INTEGER, -- Tracks which step the user is on in a flow
+        collected_data TEXT, -- JSON string to store form data like quantity, items, etc.
         ai_resolved INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -56,16 +58,38 @@ db.exec(`
     );
 `);
 
-console.log('🚀 [DATABASE] Supreme Persistent Engine initialized at: ' + finalDbPath);
+console.log('🚀 [DATABASE] Supreme Flow Engine initialized at: ' + finalDbPath);
 
 module.exports = {
-    // --- Conversation Logging (CRASH PROOF) ---
+    // --- Flow & State Management ---
+    getTicketState: (ticketId) => {
+        try {
+            return db.prepare("SELECT current_step_id, collected_data FROM tickets WHERE id = ?").get(ticketId);
+        } catch (e) { return null; }
+    },
+
+    updateTicketState: (ticketId, stepId, data = null) => {
+        try {
+            if (data) {
+                const stmt = db.prepare("UPDATE tickets SET current_step_id = ?, collected_data = ? WHERE id = ?");
+                return stmt.run(stepId, JSON.stringify(data), ticketId);
+            } else {
+                const stmt = db.prepare("UPDATE tickets SET current_step_id = ? WHERE id = ?");
+                return stmt.run(stepId, ticketId);
+            }
+        } catch (e) { return null; }
+    },
+
+    getTrainingById: (id) => {
+        try {
+            return db.prepare("SELECT * FROM training WHERE id = ?").get(id);
+        } catch (e) { return null; }
+    },
+
+    // --- Conversation Logging ---
     addConversation: (ticketId, userId, message, isAi = 0) => {
         try {
-            // Ensure ticket exists (no foreign key needed)
             db.prepare("INSERT OR IGNORE INTO tickets (id, user_id, status) VALUES (?, ?, 'open')").run(ticketId, userId);
-            
-            // Insert the message
             const stmt = db.prepare("INSERT INTO conversations (ticket_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)");
             return stmt.run(ticketId, userId, message, isAi);
         } catch (error) {
@@ -74,8 +98,12 @@ module.exports = {
         }
     },
 
-    addTraining: (query, response, category = 'general') => {
-        try { return db.prepare('INSERT INTO training (query, response, category) VALUES (?, ?, ?)').run(query, response, category); } catch (e) { return null; }
+    // --- Training System ---
+    addTraining: (query, response, category = 'general', nextStepId = null) => {
+        try { 
+            const stmt = db.prepare('INSERT INTO training (query, response, category, next_step_id) VALUES (?, ?, ?, ?)');
+            return stmt.run(query, response, category, nextStepId); 
+        } catch (e) { return null; }
     },
     
     getAllTraining: () => {
