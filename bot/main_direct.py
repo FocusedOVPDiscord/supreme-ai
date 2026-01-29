@@ -38,9 +38,6 @@ class SupremeAIBot(commands.Bot):
             
             logger.info("✓ Bot initialized successfully")
             
-            # Register commands directly
-            self.register_commands()
-            
         except Exception as e:
             logger.error(f"✗ Error in __init__: {e}")
             traceback.print_exc()
@@ -141,6 +138,10 @@ class SupremeAIBot(commands.Bot):
         try:
             logger.info("🚀 Setting up bot...")
             
+            # Register commands FIRST
+            self.register_commands()
+            
+            # Check Groq connection
             self.groq_ready = await self.ai.check_health()
             if self.groq_ready:
                 logger.info("✓ Groq AI ready")
