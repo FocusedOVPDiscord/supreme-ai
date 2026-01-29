@@ -1,9 +1,5 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection, REST, Routes, Events, ChannelType, EmbedBuilder } = require('discord.js');
-// Force reset database to clear volume constraints
-const resetDb = require('./utils/reset-db');
-resetDb();
-
 const db = require('./utils/database');
 const ai = require('./utils/ai');
 const commandsList = require('./commands');
@@ -30,12 +26,14 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 async function registerCommands() {
     try {
+        console.log('🔄 [BOT] Registering slash commands...');
         if (process.env.DISCORD_GUILD_ID) {
             await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: commandsData });
         } else {
             await rest.put(Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), { body: commandsData });
         }
-    } catch (error) { console.error('Command registration error:', error); }
+        console.log('✅ [BOT] Slash commands registered successfully.');
+    } catch (error) { console.error('❌ [BOT] Command registration error:', error); }
 }
 
 client.once(Events.ClientReady, async () => {
@@ -76,7 +74,24 @@ client.on(Events.ChannelCreate, async channel => {
     }, 1500);
 });
 
-// 2. Proactive AI Response & Learning
+// 2. Command Handling
+client.on(Events.InteractionCreate, async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
+
+    try {
+        await command.execute(interaction);
+    } catch (error) {
+        console.error(`❌ [COMMAND ERROR] ${interaction.commandName}:`, error);
+        const reply = { content: '❌ There was an error executing this command!', ephemeral: true };
+        if (interaction.replied || interaction.deferred) await interaction.followUp(reply);
+        else await interaction.reply(reply);
+    }
+});
+
+// 3. Proactive AI Response & Learning
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !isTicketChannel(message.channel)) return;
     
@@ -96,6 +111,7 @@ client.on(Events.MessageCreate, async message => {
         if (match && match.response) {
             response = match.response;
             db.incrementUsage(match.id);
+            console.log(`✅ [TRAINED] Matched: "${message.content.substring(0, 30)}..."`);
         } else {
             const history = db.getTicketHistory(ticketId, 8);
             const context = history.map(h => `${h.is_ai ? 'AI' : 'User'}: ${h.message}`).join('\n');
@@ -115,7 +131,7 @@ client.on(Events.MessageCreate, async message => {
     } catch (error) { console.error('Processing error:', error); }
 });
 
-// 3. Error Protection
+// 4. Error Protection
 process.on('unhandledRejection', error => console.error('Unhandled Rejection:', error));
 process.on('uncaughtException', error => console.error('Uncaught Exception:', error));
 

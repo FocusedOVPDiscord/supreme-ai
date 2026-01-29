@@ -2,16 +2,28 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// We use a completely new filename to ensure we aren't using the old broken volume file
-const dbPath = path.join(__dirname, '../../data/supreme_final.db');
+/**
+ * DATABASE PERSISTENCE CONFIGURATION
+ * We use /app/data/supreme_final.db which matches the Koyeb Volume mount path.
+ * This ensures data is NOT lost on bot restarts.
+ */
+const dbPath = '/app/data/supreme_final.db';
 const dbDir = path.dirname(dbPath);
 
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+// Fallback for local testing if /app/data doesn't exist
+const finalDbPath = fs.existsSync('/app') ? dbPath : path.join(__dirname, '../../data/supreme_final.db');
+const finalDbDir = path.dirname(finalDbPath);
+
+if (!fs.existsSync(finalDbDir)) {
+    try {
+        fs.mkdirSync(finalDbDir, { recursive: true });
+    } catch (e) {
+        console.warn('⚠️ Could not create directory, using local fallback');
+    }
 }
 
-// Open database and STICKLY DISABLE foreign keys
-const db = new Database(dbPath);
+// Open database and STRICTLY DISABLE foreign keys to prevent constraint crashes
+const db = new Database(finalDbPath);
 db.pragma('foreign_keys = OFF');
 
 // Create tables without ANY foreign key keywords in the SQL
@@ -44,10 +56,10 @@ db.exec(`
     );
 `);
 
-console.log('🚀 [DATABASE] Supreme Final initialized at: ' + dbPath);
+console.log('🚀 [DATABASE] Supreme Persistent Engine initialized at: ' + finalDbPath);
 
 module.exports = {
-    // CRASH-PROOF addConversation
+    // --- Conversation Logging (CRASH PROOF) ---
     addConversation: (ticketId, userId, message, isAi = 0) => {
         try {
             // Ensure ticket exists (no foreign key needed)
@@ -68,6 +80,10 @@ module.exports = {
     
     getAllTraining: () => {
         try { return db.prepare('SELECT * FROM training ORDER BY created_at DESC').all(); } catch (e) { return []; }
+    },
+
+    getTrainingByCategory: (category) => {
+        try { return db.prepare('SELECT * FROM training WHERE category = ? ORDER BY created_at DESC').all(category); } catch (e) { return []; }
     },
     
     deleteTraining: (id) => {
@@ -93,6 +109,25 @@ module.exports = {
     
     getTicketHistory: (ticketId, limit = 10) => {
         try { return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?').all(ticketId, limit).reverse(); } catch (e) { return []; }
+    },
+
+    getAllConversations: (ticketId) => {
+        try { return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at ASC').all(ticketId); } catch (e) { return []; }
+    },
+
+    getAllTickets: (status = null) => {
+        try {
+            if (status) return db.prepare('SELECT * FROM tickets WHERE status = ? ORDER BY created_at DESC').all(status);
+            return db.prepare('SELECT * FROM tickets ORDER BY created_at DESC').all();
+        } catch (e) { return []; }
+    },
+
+    getTopTraining: (limit = 10) => {
+        try { return db.prepare('SELECT * FROM training ORDER BY usage_count DESC LIMIT ?').all(limit); } catch (e) { return []; }
+    },
+
+    markResolvedByAI: (id) => {
+        try { return db.prepare('UPDATE tickets SET ai_resolved = 1 WHERE id = ?').run(id); } catch (e) { return null; }
     },
 
     getStats: () => {
