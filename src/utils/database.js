@@ -116,7 +116,7 @@ module.exports = {
     },
     
     updateTicketStatus: (id, status) => {
-        const stmt = db.prepare('UPDATE tickets SET status = ?, closed_at = CASE WHEN ? = "closed" THEN CURRENT_TIMESTAMP ELSE closed_at END WHERE id = ?');
+        const stmt = db.prepare('UPDATE tickets SET status = ?, closed_at = CASE WHEN ? = \'closed\' THEN CURRENT_TIMESTAMP ELSE closed_at END WHERE id = ?');
         return stmt.run(status, status, id);
     },
     
@@ -154,17 +154,22 @@ module.exports = {
     
     // Statistics
     getStats: () => {
-        const trainingCount = db.prepare('SELECT COUNT(*) as count FROM training').get().count;
-        const ticketCount = db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status = 'open'").get().count;
-        const conversationCount = db.prepare('SELECT COUNT(*) as count FROM conversations').get().count;
-        const totalTickets = db.prepare('SELECT COUNT(*) as count FROM tickets').get().count;
-        
-        return { 
-            trainingCount, 
-            ticketCount, 
-            conversationCount,
-            totalTickets
-        };
+        try {
+            const trainingCount = db.prepare('SELECT COUNT(*) as count FROM training').get().count;
+            const ticketCount = db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status = 'open'").get().count;
+            const conversationCount = db.prepare('SELECT COUNT(*) as count FROM conversations').get().count;
+            const totalTickets = db.prepare('SELECT COUNT(*) as count FROM tickets').get().count;
+            
+            return { 
+                trainingCount, 
+                ticketCount, 
+                conversationCount,
+                totalTickets
+            };
+        } catch (error) {
+            console.error('Error in getStats:', error);
+            return { trainingCount: 0, ticketCount: 0, conversationCount: 0, totalTickets: 0 };
+        }
     },
     
     getTopTraining: (limit = 10) => {
@@ -192,7 +197,7 @@ module.exports = {
     
     // Database maintenance
     clearOldConversations: (daysOld = 30) => {
-        const stmt = db.prepare(`DELETE FROM conversations WHERE created_at < datetime('now', '-' || ? || ' days')`);
+        const stmt = db.prepare('DELETE FROM conversations WHERE created_at < datetime(\'now\', \'-\' || ? || \' days\')');
         return stmt.run(daysOld);
     },
     
