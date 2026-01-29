@@ -104,3 +104,27 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+data/training.db
+data/training.db.backup
+
+# Python specific
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Bot specific
+logs/*.log
+exports/
+*.backup
+bot/__pycache__/
+bot/commands/__pycache__/
+bot/memory/__pycache__/
+bot/ai/__pycache__/
+bot/utils/__pycache__/

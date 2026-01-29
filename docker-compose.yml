@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  supreme-ai-bot:
+    build: .
+    container_name: supreme-ai-bot
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=mixtral-8x7b-32768
+      - BOT_PREFIX=!
+      - LOG_LEVEL=INFO
+      - DB_PATH=./data/training.db
+      - SIMILARITY_THRESHOLD=0.7
+      - MAX_CONTEXT_LENGTH=2000
+      - ENABLE_AUTO_RESPONSE=true
+      - ENABLE_TRAINING=true
+      - RESPONSE_TIMEOUT=30
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - supreme-ai
+
+networks:
+  supreme-ai:
+    driver: bridge
