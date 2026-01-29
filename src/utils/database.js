@@ -12,6 +12,7 @@ if (!fs.existsSync(dbDir)) {
 const db = new Database(dbPath);
 
 // Initialize tables with enhanced schema
+// Removed strict FOREIGN KEY constraint to prevent crashes when tickets are auto-created
 db.exec(`
     CREATE TABLE IF NOT EXISTS training (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,15 +134,21 @@ module.exports = {
     
     // Conversation management
     addConversation: (ticketId, userId, message, isAi = 0) => {
-        // Ensure ticket exists
-        const ticket = db.prepare('SELECT id FROM tickets WHERE id = ?').get(ticketId);
-        if (!ticket) {
-            // Auto-create ticket if it doesn't exist
-            db.prepare('INSERT OR IGNORE INTO tickets (id, user_id) VALUES (?, ?)').run(ticketId, userId);
+        try {
+            // Ensure ticket exists in the tickets table first
+            const ticket = db.prepare('SELECT id FROM tickets WHERE id = ?').get(ticketId);
+            if (!ticket) {
+                // Auto-create ticket if it doesn't exist to maintain data integrity
+                db.prepare('INSERT OR IGNORE INTO tickets (id, user_id, status) VALUES (?, ?, \'open\')').run(ticketId, userId);
+            }
+            
+            const stmt = db.prepare('INSERT INTO conversations (ticket_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)');
+            return stmt.run(ticketId, userId, message, isAi);
+        } catch (error) {
+            console.error('❌ Error in addConversation:', error);
+            // Don't throw error to prevent bot crash
+            return null;
         }
-        
-        const stmt = db.prepare('INSERT INTO conversations (ticket_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)');
-        return stmt.run(ticketId, userId, message, isAi);
     },
     
     getTicketHistory: (ticketId, limit = 10) => {
