@@ -1,56 +1,87 @@
 """
-Simplified Slash Commands
+Prefix-based commands (!) for Supreme AI Bot
 """
 import discord
-from discord import app_commands
+from discord.ext import commands
 import logging
 
 logger = logging.getLogger(__name__)
 
-def setup_commands(bot):
-    """Register all commands to the bot's tree"""
-    
-    # 1. Train Group
-    train = app_commands.Group(name="train", description="Training commands")
-    
-    @train.command(name="add", description="Add training data")
-    async def add(interaction: discord.Interaction, question: str, answer: str, category: str = "general"):
-        await interaction.response.defer()
-        success = bot.db.add_training(query=question, response=answer, category=category)
-        await interaction.followup.send("✅ Added" if success else "❌ Failed")
+def setup_commands(bot: commands.Bot):
+    """Register all prefix commands to the bot"""
 
-    @train.command(name="list", description="List training data")
-    async def list_cmd(interaction: discord.Interaction):
-        await interaction.response.defer()
-        data = bot.db.get_all_training()
-        await interaction.followup.send(f"📚 Found {len(data)} entries")
+    @bot.command(name="train")
+    async def train(ctx, action: str = None, *, args: str = None):
+        """
+        !train add <question> | <answer>
+        !train list
+        !train stats
+        """
+        if not action:
+            await ctx.send("❓ Usage: `!train add <q> | <a>`, `!train list`, or `!train stats`")
+            return
 
-    @train.command(name="stats", description="Show statistics")
-    async def stats(interaction: discord.Interaction):
-        await interaction.response.defer()
-        s = bot.db.get_stats()
-        await interaction.followup.send(f"📊 {s['total_training_entries']} entries")
+        if action.lower() == "add":
+            if not args or "|" not in args:
+                await ctx.send("❌ Usage: `!train add <question> | <answer>`")
+                return
+            
+            question, answer = [x.strip() for x in args.split("|", 1)]
+            success = bot.db.add_training(query=question, response=answer, category="general")
+            await ctx.send("✅ Training added!" if success else "❌ Failed to add training.")
 
-    # 2. Ticket Group
-    ticket = app_commands.Group(name="ticket", description="Ticket commands")
-    
-    @ticket.command(name="info", description="Get ticket info")
-    async def info(interaction: discord.Interaction, ticket_number: str):
-        await interaction.response.defer()
-        await interaction.followup.send(f"🎫 Info for {ticket_number}")
+        elif action.lower() == "list":
+            data = bot.db.get_all_training()
+            await ctx.send(f"📚 Found {len(data)} training entries.")
 
-    @ticket.command(name="close", description="Close a ticket")
-    async def close(interaction: discord.Interaction, ticket_number: str):
-        await interaction.response.defer()
-        await interaction.followup.send(f"✅ Closed {ticket_number}")
+        elif action.lower() == "stats":
+            s = bot.db.get_stats()
+            embed = discord.Embed(title="📊 Training Stats", color=discord.Color.blue())
+            embed.add_field(name="Total Entries", value=str(s['total_training_entries']))
+            embed.add_field(name="Conversations", value=str(s['total_conversations']))
+            await ctx.send(embed=embed)
 
-    # 3. Standalone
-    @bot.tree.command(name="status", description="Check bot status")
-    async def status(interaction: discord.Interaction):
-        await interaction.response.send_message("✅ Online")
+    @bot.command(name="ticket")
+    async def ticket(ctx, action: str = None, ticket_number: str = None):
+        """
+        !ticket info <number>
+        !ticket close <number>
+        """
+        if not action or not ticket_number:
+            await ctx.send("❓ Usage: `!ticket info <number>` or `!ticket close <number>`")
+            return
 
-    # Add groups
-    bot.tree.add_command(train)
-    bot.tree.add_command(ticket)
-    
-    print(f"✓ Registered {len(bot.tree.get_commands())} top-level commands/groups")
+        if action.lower() == "info":
+            await ctx.send(f"🎫 Info for ticket {ticket_number} requested.")
+        
+        elif action.lower() == "close":
+            await ctx.send(f"✅ Ticket {ticket_number} closed.")
+
+    @bot.command(name="status")
+    async def status(ctx):
+        """!status"""
+        stats = bot.db.get_stats()
+        embed = discord.Embed(title="🤖 Bot Status", color=discord.Color.green())
+        embed.add_field(name="Prefix", value="`!`", inline=True)
+        embed.add_field(name="Groq AI", value="✓ Online" if bot.groq_ready else "✗ Offline", inline=True)
+        embed.add_field(name="Guilds", value=str(len(bot.guilds)), inline=True)
+        await ctx.send(embed=embed)
+
+    @bot.command(name="help")
+    async def help_command(ctx):
+        """!help"""
+        embed = discord.Embed(title="📖 Supreme AI Help", color=discord.Color.blue())
+        embed.add_field(name="Admin Commands", value=(
+            "`!status` - Check bot status\n"
+            "`!train add <q> | <a>` - Add training data\n"
+            "`!train list` - List all training\n"
+            "`!train stats` - Show training stats"
+        ), inline=False)
+        embed.add_field(name="Ticket Commands", value=(
+            "`!ticket info <num>` - Get ticket info\n"
+            "`!ticket close <num>` - Close a ticket"
+        ), inline=False)
+        await ctx.send(embed=embed)
+
+    print("✓ Prefix commands (!) registered")
+    logger.info("✓ Prefix commands (!) registered")
