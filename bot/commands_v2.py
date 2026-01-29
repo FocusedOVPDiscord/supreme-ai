@@ -1,5 +1,5 @@
 """
-Full Feature Prefix Commands (!) for Supreme AI Bot
+Full Feature Prefix Commands (!) for Supreme AI Bot - Fixed Help
 """
 import discord
 from discord.ext import commands
@@ -12,19 +12,44 @@ logger = logging.getLogger(__name__)
 def setup_commands(bot: commands.Bot):
     """Register all prefix commands to the bot"""
 
-    # --- TRAINING SYSTEM ---
-    @bot.group(name="train", invoke_without_command=True)
-    async def train(ctx):
-        """!train - Base command for training"""
+    # --- HELP COMMAND ---
+    @bot.command(name="help")
+    async def help_command(ctx):
+        """Custom help menu"""
         p = bot.command_prefix
-        embed = discord.Embed(title="🧠 Training System", color=discord.Color.blue())
-        embed.add_field(name="Commands", value=(
+        embed = discord.Embed(
+            title="📖 Supreme AI Help Menu", 
+            description="Welcome to Supreme AI! Here are the available commands:",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(name="🧠 Training System", value=(
             f"`{p}train add <q> | <a>` - Add training data\n"
             f"`{p}train list` - List all training\n"
             f"`{p}train stats` - Show training stats\n"
             f"`{p}train delete <id>` - Delete an entry"
         ), inline=False)
+        
+        embed.add_field(name="🎫 Ticket Management", value=(
+            f"`{p}ticket info <num>` - Get ticket info\n"
+            f"`{p}ticket close <num>` - Close a ticket\n"
+            f"`{p}setup` - Run bot setup"
+        ), inline=False)
+        
+        embed.add_field(name="🛠️ Admin & Utility", value=(
+            f"`{p}status` - Check bot & AI status\n"
+            f"`{p}export` - Export training data (JSON)\n"
+            f"`{p}test` - Quick connection test"
+        ), inline=False)
+        
+        embed.set_footer(text="Supreme AI | Powered by Groq")
         await ctx.send(embed=embed)
+
+    # --- TRAINING SYSTEM ---
+    @bot.group(name="train", invoke_without_command=True)
+    async def train(ctx):
+        """!train - Base command for training"""
+        await help_command(ctx)
 
     @train.command(name="add")
     async def train_add(ctx, *, args: str = None):
@@ -71,14 +96,7 @@ def setup_commands(bot: commands.Bot):
     @bot.group(name="ticket", invoke_without_command=True)
     async def ticket(ctx):
         """!ticket - Base command for tickets"""
-        p = bot.command_prefix
-        embed = discord.Embed(title="🎫 Ticket Management", color=discord.Color.green())
-        embed.add_field(name="Commands", value=(
-            f"`{p}ticket info <num>` - Get ticket info\n"
-            f"`{p}ticket close <num>` - Close a ticket\n"
-            f"`{p}ticket panel` - Create a ticket panel"
-        ), inline=False)
-        await ctx.send(embed=embed)
+        await help_command(ctx)
 
     @ticket.command(name="info")
     async def ticket_info(ctx, ticket_number: str):
@@ -118,15 +136,6 @@ def setup_commands(bot: commands.Bot):
         embed.add_field(name="Conversations", value=str(stats['total_conversations']), inline=True)
         await ctx.send(embed=embed)
 
-    @bot.command(name="help")
-    async def help_command(ctx):
-        p = bot.command_prefix
-        embed = discord.Embed(title="📖 Supreme AI Help", color=discord.Color.blue())
-        embed.add_field(name="Training", value=f"`{p}train add`, `{p}train list`, `{p}train stats`", inline=False)
-        embed.add_field(name="Tickets", value=f"`{p}ticket info`, `{p}ticket close`, `{p}ticket panel`", inline=False)
-        embed.add_field(name="Admin", value=f"`{p}status`, `{p}setup`, `{p}export`", inline=False)
-        await ctx.send(embed=embed)
-
     @bot.command(name="export")
     async def export(ctx):
         """Export training data as JSON"""
@@ -139,5 +148,10 @@ def setup_commands(bot: commands.Bot):
         file = discord.File(BytesIO(json_data.encode()), filename="training_export.json")
         await ctx.send("📥 Here is your training data export:", file=file)
 
-    print("✓ All features implemented with prefix commands")
-    logger.info("✓ All features implemented with prefix commands")
+    @bot.command(name="test")
+    async def test(ctx):
+        """!test"""
+        await ctx.send("✅ Bot is receiving messages and responding!")
+
+    print("✓ All features implemented with fixed custom help command")
+    logger.info("✓ All features implemented with fixed custom help command")
