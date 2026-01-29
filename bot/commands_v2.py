@@ -145,5 +145,16 @@ def setup_commands(bot):
             await interaction.followup.send(f"❌ Sync failed: {e}", ephemeral=True)
             logger.error(f"Manual sync failed: {e}")
     
+    # Add other standalone commands if needed
+    @bot.tree.command(name="status", description="Check bot status")
+    async def status(interaction: discord.Interaction):
+        await interaction.response.defer()
+        stats = bot.db.get_stats()
+        embed = discord.Embed(title="🤖 Bot Status", color=discord.Color.green())
+        embed.add_field(name="Groq AI", value="✓ Online" if bot.groq_ready else "✗ Offline", inline=True)
+        embed.add_field(name="Guilds", value=str(len(bot.guilds)), inline=True)
+        embed.add_field(name="Training Entries", value=str(stats['total_training_entries']), inline=True)
+        await interaction.followup.send(embed=embed)
+
     print("✓ Commands setup complete")
     logger.info("✓ Commands setup complete")
