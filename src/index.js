@@ -71,33 +71,36 @@ client.on(Events.MessageCreate, async message => {
     }
     
     try {
-        await message.channel.sendTyping();
         const ticket = db.getTicket(ticketId);
         if (ticket && ticket.current_step_id === -1) return;
 
         let collectedData = ticket?.collected_data ? JSON.parse(ticket.collected_data) : {};
-        
-        // Use the advanced trade logic to determine the response
-        const result = await tradeLogic.handleTradeFlow(message.content, collectedData);
+        let currentStep = ticket?.current_step_id || 0;
+
+        // Use the STRICT trade logic (No AI)
+        const result = tradeLogic.handleTradeFlow(message.content, collectedData, currentStep);
         
         if (result) {
-            if (result.extracted_data) {
-                // Merge new data
-                collectedData = { ...collectedData, ...result.extracted_data };
-                db.updateTicketState(ticketId, ticket?.current_step_id || 1, collectedData);
-            }
+            // Update state with next step and merged data
+            const newData = { ...collectedData, ...result.extracted_data };
+            db.updateTicketState(ticketId, result.next_step, newData);
 
-            await message.reply({ content: result.bot_response, allowedMentions: { repliedUser: false } });
-            db.addConversation(ticketId, client.user.id, result.bot_response, 1);
-        } else {
-            // Fallback to standard AI if logic returns null
-            const response = await ai.generateResponse(message.content);
-            if (response) {
-                const tokenCount = Math.floor(Math.random() * (10500 - 9000) + 9000);
-                const finalResponse = `${response}\n-# ${tokenCount} tokens`;
-                await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
-                db.addConversation(ticketId, client.user.id, finalResponse, 1);
-            }
+            // Replace placeholder if needed
+            let finalResponse = result.bot_response.replace(/<@User>/g, `<@${message.author.id}>`);
+
+            await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
+            db.addConversation(ticketId, client.user.id, finalResponse, 1);
+            return;
+        }
+
+        // If not in trade flow, then use AI
+        await message.channel.sendTyping();
+        const response = await ai.generateResponse(message.content);
+        if (response) {
+            const tokenCount = Math.floor(Math.random() * (10500 - 9000) + 9000);
+            const finalResponse = `${response}\n-# ${tokenCount} tokens`;
+            await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
+            db.addConversation(ticketId, client.user.id, finalResponse, 1);
         }
     } catch (error) { console.error('Processing error:', error); }
 });
