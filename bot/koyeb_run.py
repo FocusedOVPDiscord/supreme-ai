@@ -23,7 +23,7 @@ logging.basicConfig(
     level=getattr(logging, Config.LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler()  # Only console for Koyeb
+        logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
@@ -66,28 +66,47 @@ class SupremeAIBot(commands.Bot):
                 logger.warning("✗ Groq AI connection failed - check API key")
             
             # Load slash commands cog
+            logger.info("Loading slash commands...")
             try:
                 from slash_commands import TrainingCommands, TicketCommands
-                await self.add_cog(TrainingCommands(self))
-                await self.add_cog(TicketCommands(self))
-                logger.info("✓ Loaded slash commands")
+                logger.info("✓ Imported slash commands classes")
+                
+                training_cog = TrainingCommands(self)
+                ticket_cog = TicketCommands(self)
+                
+                await self.add_cog(training_cog)
+                logger.info("✓ Added TrainingCommands cog")
+                
+                await self.add_cog(ticket_cog)
+                logger.info("✓ Added TicketCommands cog")
+                
+                logger.info("✓ Slash commands loaded successfully")
             except Exception as e:
                 logger.error(f"✗ Failed to load slash commands: {e}")
                 traceback.print_exc()
             
             # Load ticket listener cog
+            logger.info("Loading ticket listener...")
             try:
                 from ticket_listener import TicketListener
-                await self.add_cog(TicketListener(self))
-                logger.info("✓ Loaded ticket listener")
+                logger.info("✓ Imported TicketListener class")
+                
+                listener_cog = TicketListener(self)
+                await self.add_cog(listener_cog)
+                logger.info("✓ Added TicketListener cog")
+                
+                logger.info("✓ Ticket listener loaded successfully")
             except Exception as e:
                 logger.error(f"✗ Failed to load ticket listener: {e}")
                 traceback.print_exc()
             
             # Sync commands with Discord
+            logger.info("Syncing commands with Discord...")
             try:
                 synced = await self.tree.sync()
                 logger.info(f"✓ Synced {len(synced)} command(s)")
+                for cmd in synced:
+                    logger.info(f"  - {cmd.name}")
             except Exception as e:
                 logger.error(f"✗ Failed to sync commands: {e}")
                 traceback.print_exc()
@@ -104,7 +123,7 @@ class SupremeAIBot(commands.Bot):
             
             # Log database stats
             try:
-                stats = self.db.get_stats()
+                stats = self.bot.db.get_stats()
                 logger.info(f"📊 Database: {stats['total_training_entries']} training entries, "
                            f"{stats['total_conversations']} conversations, "
                            f"{stats['open_tickets']} open tickets")
