@@ -70,7 +70,6 @@ module.exports = {
         return stmt.run(ticketId, userId, message, isAi);
     },
     searchSimilar: (query) => {
-        // Simple exact or partial match for now
         return db.prepare('SELECT * FROM training WHERE query LIKE ? LIMIT 1').get(`%${query}%`);
     },
     incrementUsage: (id) => {

@@ -31,7 +31,6 @@ module.exports = {
     },
     checkHealth: async () => {
         try {
-            // Simple list models call to check API key
             await groq.models.list();
             return true;
         } catch (error) {

@@ -21,13 +21,11 @@ for (const command of commandsList) {
     commandsData.push(command.data.toJSON());
 }
 
-// --- SLASH COMMAND REGISTRATION ---
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 async function registerCommands() {
     try {
         console.log('🔄 Registering slash commands...');
-        
         if (process.env.DISCORD_GUILD_ID) {
             await rest.put(
                 Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID),
@@ -46,7 +44,6 @@ async function registerCommands() {
     }
 }
 
-// --- EVENTS ---
 client.once(Events.ClientReady, async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
     await registerCommands();
@@ -54,10 +51,8 @@ client.once(Events.ClientReady, async () => {
 
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
-
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
-
     try {
         await command.execute(interaction);
     } catch (error) {
@@ -66,36 +61,22 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-// --- TICKET LISTENER ---
 client.on(Events.MessageCreate, async message => {
     if (message.author.bot) return;
-    
     const ticketPattern = /^ticket-(\d{4})$/i;
     if (!ticketPattern.test(message.channel.name)) return;
-    
     const ticketId = message.channel.name.toLowerCase();
-    console.log(`📨 Ticket message in ${ticketId}: ${message.content}`);
-
-    // Add to DB
     db.addConversation(ticketId, message.author.id, message.content);
-
-    // AI Response
     try {
         await message.channel.sendTyping();
-        
-        // Check training data first
         const match = db.searchSimilar(message.content);
         let response;
-        
         if (match) {
             response = match.response;
             db.incrementUsage(match.id);
-            console.log(`✓ Using trained response for ${ticketId}`);
         } else {
             response = await ai.generateResponse(message.content);
-            console.log(`✓ AI generated response for ${ticketId}`);
         }
-
         if (response) {
             await message.reply({ content: response, allowedMentions: { repliedUser: false } });
             db.addConversation(ticketId, client.user.id, response, 1);

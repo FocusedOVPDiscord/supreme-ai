@@ -1,9 +1,8 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../utils/database');
 const ai = require('../utils/ai');
 
 const commands = [
-    // --- STATUS ---
     {
         data: new SlashCommandBuilder()
             .setName('status')
@@ -25,8 +24,6 @@ const commands = [
             await interaction.reply({ embeds: [embed] });
         }
     },
-
-    // --- TRAIN ---
     {
         data: new SlashCommandBuilder()
             .setName('train')
@@ -74,8 +71,6 @@ const commands = [
             }
         }
     },
-
-    // --- TICKET ---
     {
         data: new SlashCommandBuilder()
             .setName('ticket')
