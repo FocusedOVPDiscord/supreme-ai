@@ -9,10 +9,12 @@ if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
 }
 
+// Initialize database with foreign keys DISABLED to prevent constraint crashes
 const db = new Database(dbPath);
+db.pragma('foreign_keys = OFF');
 
 // Initialize tables with enhanced schema
-// Removed strict FOREIGN KEY constraint to prevent crashes when tickets are auto-created
+// Note: We use separate exec calls to ensure clarity
 db.exec(`
     CREATE TABLE IF NOT EXISTS training (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,122 +43,170 @@ db.exec(`
         is_ai INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
-    CREATE INDEX IF NOT EXISTS idx_training_query ON training(query);
-    CREATE INDEX IF NOT EXISTS idx_conversations_ticket ON conversations(ticket_id);
-    CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
 `);
 
+// Add indexes for performance if they don't exist
+try {
+    db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_training_query ON training(query);
+        CREATE INDEX IF NOT EXISTS idx_conversations_ticket ON conversations(ticket_id);
+        CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+    `);
+} catch (e) {
+    console.warn('⚠️ Could not create indexes, skipping...');
+}
+
 console.log('✅ Database initialized at:', dbPath);
+console.log('🔒 Foreign key enforcement: OFF');
 
 module.exports = {
     // Training data management
     addTraining: (query, response, category = 'general') => {
-        const stmt = db.prepare('INSERT INTO training (query, response, category) VALUES (?, ?, ?)');
-        const result = stmt.run(query, response, category);
-        console.log(`✅ Training added: ID ${result.lastInsertRowid}`);
-        return result;
+        try {
+            const stmt = db.prepare('INSERT INTO training (query, response, category) VALUES (?, ?, ?)');
+            const result = stmt.run(query, response, category);
+            return result;
+        } catch (error) {
+            console.error('❌ Error in addTraining:', error.message);
+            return null;
+        }
     },
     
     getAllTraining: () => {
-        return db.prepare('SELECT * FROM training ORDER BY created_at DESC').all();
+        try {
+            return db.prepare('SELECT * FROM training ORDER BY created_at DESC').all();
+        } catch (error) {
+            return [];
+        }
     },
     
     getTrainingByCategory: (category) => {
-        return db.prepare('SELECT * FROM training WHERE category = ? ORDER BY created_at DESC').all(category);
+        try {
+            return db.prepare('SELECT * FROM training WHERE category = ? ORDER BY created_at DESC').all(category);
+        } catch (error) {
+            return [];
+        }
     },
     
     deleteTraining: (id) => {
-        const result = db.prepare('DELETE FROM training WHERE id = ?').run(id);
-        console.log(`✅ Training deleted: ID ${id}`);
-        return result;
+        try {
+            return db.prepare('DELETE FROM training WHERE id = ?').run(id);
+        } catch (error) {
+            return null;
+        }
     },
     
     updateTraining: (id, query, response, category) => {
-        const stmt = db.prepare('UPDATE training SET query = ?, response = ?, category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-        return stmt.run(query, response, category, id);
+        try {
+            const stmt = db.prepare('UPDATE training SET query = ?, response = ?, category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+            return stmt.run(query, response, category, id);
+        } catch (error) {
+            return null;
+        }
     },
     
-    // Search for similar training data (fuzzy matching)
     searchSimilar: (query) => {
-        const lowerQuery = query.toLowerCase();
-        
-        // Try exact match first
-        let result = db.prepare('SELECT * FROM training WHERE LOWER(query) = ? LIMIT 1').get(lowerQuery);
-        if (result) return result;
-        
-        // Try partial match
-        result = db.prepare('SELECT * FROM training WHERE LOWER(query) LIKE ? ORDER BY usage_count DESC LIMIT 1').get(`%${lowerQuery}%`);
-        if (result) return result;
-        
-        // Try word-based matching
-        const words = lowerQuery.split(/\s+/).filter(w => w.length > 3);
-        if (words.length > 0) {
-            const conditions = words.map(() => 'LOWER(query) LIKE ?').join(' OR ');
-            const params = words.map(w => `%${w}%`);
-            result = db.prepare(`SELECT * FROM training WHERE ${conditions} ORDER BY usage_count DESC LIMIT 1`).get(...params);
+        try {
+            const lowerQuery = query.toLowerCase();
+            
+            // Try exact match first
+            let result = db.prepare('SELECT * FROM training WHERE LOWER(query) = ? LIMIT 1').get(lowerQuery);
+            if (result) return result;
+            
+            // Try partial match
+            result = db.prepare('SELECT * FROM training WHERE LOWER(query) LIKE ? ORDER BY usage_count DESC LIMIT 1').get(`%${lowerQuery}%`);
+            if (result) return result;
+            
+            // Try word-based matching
+            const words = lowerQuery.split(/\s+/).filter(w => w.length > 3);
+            if (words.length > 0) {
+                const conditions = words.map(() => 'LOWER(query) LIKE ?').join(' OR ');
+                const params = words.map(w => `%${w}%`);
+                result = db.prepare(`SELECT * FROM training WHERE ${conditions} ORDER BY usage_count DESC LIMIT 1`).get(...params);
+            }
+            
+            return result;
+        } catch (error) {
+            return null;
         }
-        
-        return result;
     },
     
     incrementUsage: (id) => {
-        return db.prepare('UPDATE training SET usage_count = usage_count + 1 WHERE id = ?').run(id);
+        try {
+            return db.prepare('UPDATE training SET usage_count = usage_count + 1 WHERE id = ?').run(id);
+        } catch (error) {
+            return null;
+        }
     },
     
     // Ticket management
     createTicket: (id, userId, category = 'general') => {
         try {
-            const stmt = db.prepare('INSERT INTO tickets (id, user_id, category) VALUES (?, ?, ?)');
+            const stmt = db.prepare('INSERT OR IGNORE INTO tickets (id, user_id, category) VALUES (?, ?, ?)');
             return stmt.run(id, userId, category);
         } catch (error) {
-            // Ticket might already exist, ignore
-            console.log(`ℹ️ Ticket ${id} already exists`);
+            console.error(`❌ Error creating ticket ${id}:`, error.message);
             return null;
         }
     },
     
     updateTicketStatus: (id, status) => {
-        const stmt = db.prepare('UPDATE tickets SET status = ?, closed_at = CASE WHEN ? = \'closed\' THEN CURRENT_TIMESTAMP ELSE closed_at END WHERE id = ?');
-        return stmt.run(status, status, id);
+        try {
+            const stmt = db.prepare('UPDATE tickets SET status = ?, closed_at = CASE WHEN ? = \'closed\' THEN CURRENT_TIMESTAMP ELSE closed_at END WHERE id = ?');
+            return stmt.run(status, status, id);
+        } catch (error) {
+            return null;
+        }
     },
     
     getTicket: (id) => {
-        return db.prepare('SELECT * FROM tickets WHERE id = ?').get(id);
+        try {
+            return db.prepare('SELECT * FROM tickets WHERE id = ?').get(id);
+        } catch (error) {
+            return null;
+        }
     },
     
     getAllTickets: (status = null) => {
-        if (status) {
-            return db.prepare('SELECT * FROM tickets WHERE status = ? ORDER BY created_at DESC').all(status);
+        try {
+            if (status) {
+                return db.prepare('SELECT * FROM tickets WHERE status = ? ORDER BY created_at DESC').all(status);
+            }
+            return db.prepare('SELECT * FROM tickets ORDER BY created_at DESC').all();
+        } catch (error) {
+            return [];
         }
-        return db.prepare('SELECT * FROM tickets ORDER BY created_at DESC').all();
     },
     
     // Conversation management
     addConversation: (ticketId, userId, message, isAi = 0) => {
         try {
-            // Ensure ticket exists in the tickets table first
-            const ticket = db.prepare('SELECT id FROM tickets WHERE id = ?').get(ticketId);
-            if (!ticket) {
-                // Auto-create ticket if it doesn't exist to maintain data integrity
-                db.prepare('INSERT OR IGNORE INTO tickets (id, user_id, status) VALUES (?, ?, \'open\')').run(ticketId, userId);
-            }
+            // Ensure ticket entry exists (no foreign key enforcement, but good for structure)
+            db.prepare('INSERT OR IGNORE INTO tickets (id, user_id, status) VALUES (?, ?, \'open\')').run(ticketId, userId);
             
             const stmt = db.prepare('INSERT INTO conversations (ticket_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)');
             return stmt.run(ticketId, userId, message, isAi);
         } catch (error) {
-            console.error('❌ Error in addConversation:', error);
-            // Don't throw error to prevent bot crash
+            console.error('❌ Database error in addConversation:', error.message);
+            // We do NOT rethrow here to keep the bot alive
             return null;
         }
     },
     
     getTicketHistory: (ticketId, limit = 10) => {
-        return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?').all(ticketId, limit).reverse();
+        try {
+            return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?').all(ticketId, limit).reverse();
+        } catch (error) {
+            return [];
+        }
     },
     
     getAllConversations: (ticketId) => {
-        return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at ASC').all(ticketId);
+        try {
+            return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at ASC').all(ticketId);
+        } catch (error) {
+            return [];
+        }
     },
     
     // Statistics
@@ -174,42 +224,62 @@ module.exports = {
                 totalTickets
             };
         } catch (error) {
-            console.error('Error in getStats:', error);
+            console.error('Error in getStats:', error.message);
             return { trainingCount: 0, ticketCount: 0, conversationCount: 0, totalTickets: 0 };
         }
     },
     
     getTopTraining: (limit = 10) => {
-        return db.prepare('SELECT * FROM training ORDER BY usage_count DESC LIMIT ?').all(limit);
+        try {
+            return db.prepare('SELECT * FROM training ORDER BY usage_count DESC LIMIT ?').all(limit);
+        } catch (error) {
+            return [];
+        }
     },
     
     // Export/Import functionality
     exportData: () => {
-        return {
-            training: db.prepare('SELECT * FROM training').all(),
-            tickets: db.prepare('SELECT * FROM tickets').all(),
-            conversations: db.prepare('SELECT * FROM conversations').all()
-        };
+        try {
+            return {
+                training: db.prepare('SELECT * FROM training').all(),
+                tickets: db.prepare('SELECT * FROM tickets').all(),
+                conversations: db.prepare('SELECT * FROM conversations').all()
+            };
+        } catch (error) {
+            return { training: [], tickets: [], conversations: [] };
+        }
     },
     
     importTraining: (data) => {
-        const stmt = db.prepare('INSERT INTO training (query, response, category, usage_count) VALUES (?, ?, ?, ?)');
-        const insertMany = db.transaction((items) => {
-            for (const item of items) {
-                stmt.run(item.query, item.response, item.category || 'general', item.usage_count || 0);
-            }
-        });
-        insertMany(data);
+        try {
+            const stmt = db.prepare('INSERT INTO training (query, response, category, usage_count) VALUES (?, ?, ?, ?)');
+            const insertMany = db.transaction((items) => {
+                for (const item of items) {
+                    stmt.run(item.query, item.response, item.category || 'general', item.usage_count || 0);
+                }
+            });
+            insertMany(data);
+        } catch (error) {
+            console.error('❌ Error importing training:', error.message);
+        }
     },
     
     // Database maintenance
     clearOldConversations: (daysOld = 30) => {
-        const stmt = db.prepare('DELETE FROM conversations WHERE created_at < datetime(\'now\', \'-\' || ? || \' days\')');
-        return stmt.run(daysOld);
+        try {
+            const stmt = db.prepare('DELETE FROM conversations WHERE created_at < datetime(\'now\', \'-\' || ? || \' days\')');
+            return stmt.run(daysOld);
+        } catch (error) {
+            return null;
+        }
     },
     
     vacuum: () => {
-        db.exec('VACUUM');
-        console.log('✅ Database optimized');
+        try {
+            db.exec('VACUUM');
+            console.log('✅ Database optimized');
+        } catch (error) {
+            console.error('❌ Vacuum failed:', error.message);
+        }
     }
 };
