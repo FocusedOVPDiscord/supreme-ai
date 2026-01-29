@@ -9,7 +9,8 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.DirectMessages
     ]
 });
 
@@ -73,21 +74,28 @@ function isTicketChannel(channel) {
     
     // Check if it's a text channel or thread
     const validTypes = [ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread];
-    if (!validTypes.includes(channel.type)) return false;
+    if (!validTypes.includes(channel.type)) {
+        // console.log(`[DEBUG] Channel ${channel.name} is not a valid type: ${channel.type}`);
+        return false;
+    }
     
     const name = channel.name.toLowerCase();
     
     // Common ticket patterns
     const ticketPatterns = [
-        /^ticket-\d+$/,           // ticket-0001, ticket-1234
-        /^ticket_\d+$/,           // ticket_0001
-        /^\d{4}-ticket$/,         // 0001-ticket
-        /^support-\d+$/,          // support-0001
-        /^help-\d+$/,             // help-0001
-        /ticket/,                 // any channel with "ticket" in name
+        /ticket/i,                 // any channel with "ticket" in name
+        /support/i,                // any channel with "support" in name
+        /help/i,                   // any channel with "help" in name
+        /claim/i,                  // any channel with "claim" in name
+        /^t-\d+$/i,                // t-0001
+        /^\d+$/                    // just numbers
     ];
     
-    return ticketPatterns.some(pattern => pattern.test(name));
+    const isMatch = ticketPatterns.some(pattern => pattern.test(name));
+    if (isMatch) {
+        console.log(`[DEBUG] Detected ticket channel: ${channel.name}`);
+    }
+    return isMatch;
 }
 
 // Get ticket ID from channel name
@@ -109,7 +117,21 @@ client.on(Events.MessageCreate, async message => {
     if (message.author.bot) return;
     
     // Check if this is a ticket channel
-    if (!isTicketChannel(message.channel)) return;
+    if (!isTicketChannel(message.channel)) {
+        // Log for debugging if it's likely a ticket but missed by pattern
+        if (message.channel.name.toLowerCase().includes('ticket') || 
+            message.channel.name.toLowerCase().includes('support')) {
+            console.log(`[DEBUG] Potential ticket channel MISSED: ${message.channel.name}`);
+        }
+        return;
+    }
+    
+    // Check permissions
+    const permissions = message.channel.permissionsFor(client.user);
+    if (!permissions || !permissions.has(['ViewChannel', 'SendMessages', 'ReadMessageHistory'])) {
+        console.log(`[ERROR] Missing permissions in ${message.channel.name}: ViewChannel, SendMessages, or ReadMessageHistory`);
+        return;
+    }
     
     const ticketId = getTicketId(message.channel.name);
     console.log(`📩 Message in ticket channel: ${message.channel.name} (ID: ${ticketId})`);
