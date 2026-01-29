@@ -180,6 +180,22 @@ class TrainingDatabase:
             # Reverse to get chronological order
             return list(reversed(messages))
     
+    def get_all_training(self, category: Optional[str] = None) -> List[Dict]:
+        """Get all training data, optionally filtered by category"""
+        with sqlite3.connect(self.db_path) as conn:
+            if category:
+                cursor = conn.execute(
+                    "SELECT * FROM training_data WHERE category = ? ORDER BY created_at DESC",
+                    (category,)
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT * FROM training_data ORDER BY created_at DESC"
+                )
+            
+            rows = cursor.fetchall()
+            return [self._row_to_dict(row, cursor.description) for row in rows]
+    
     def create_ticket_context(self, ticket_id: str, user_id: str, category: str = "general") -> bool:
         """Create ticket context entry"""
         try:
@@ -208,6 +224,49 @@ class TrainingDatabase:
         except Exception as e:
             print(f"Error closing ticket: {e}")
             return False
+    
+    def update_ticket_status(self, ticket_id: str, status: str) -> bool:
+        """Update ticket status"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                if status == 'closed':
+                    conn.execute("""
+                        UPDATE ticket_context 
+                        SET status = ?, closed_at = CURRENT_TIMESTAMP
+                        WHERE ticket_id = ?
+                    """, (status, ticket_id))
+                else:
+                    conn.execute("""
+                        UPDATE ticket_context 
+                        SET status = ?
+                        WHERE ticket_id = ?
+                    """, (status, ticket_id))
+                conn.commit()
+                return True
+        except Exception as e:
+            print(f"Error updating ticket status: {e}")
+            return False
+    
+    def get_ticket_context_info(self, ticket_id: str) -> Optional[Dict]:
+        """Get ticket context info (not conversation history)"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT * FROM ticket_context WHERE ticket_id = ?",
+                (ticket_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                return self._row_to_dict(row, cursor.description)
+        return None
+    
+    def add_conversation_message(self, ticket_id: str, user_id: str, message: str, 
+                                is_ai_generated: bool = False) -> bool:
+        """Add a message to conversation history"""
+        return self.add_conversation(ticket_id, user_id, message, None, is_ai_generated)
+    
+    def get_conversation_history(self, ticket_id: str, limit: int = 10) -> List[Dict]:
+        """Get conversation history for a ticket"""
+        return self.get_ticket_context(ticket_id, limit)
     
     def get_stats(self) -> Dict:
         """Get database statistics"""

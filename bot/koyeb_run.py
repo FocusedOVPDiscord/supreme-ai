@@ -65,6 +65,19 @@ class SupremeAIBot(commands.Bot):
             else:
                 logger.warning("✗ Groq AI connection failed - check API key")
             
+            # Load cogs
+            try:
+                await self.load_extension("slash_commands")
+                logger.info("✓ Loaded slash commands")
+            except Exception as e:
+                logger.error(f"✗ Failed to load slash commands: {e}")
+            
+            try:
+                await self.load_extension("ticket_listener")
+                logger.info("✓ Loaded ticket listener")
+            except Exception as e:
+                logger.error(f"✗ Failed to load ticket listener: {e}")
+            
             # Sync commands with Discord
             try:
                 synced = await self.tree.sync()
