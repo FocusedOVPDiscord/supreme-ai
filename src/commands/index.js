@@ -271,6 +271,27 @@ const commands = [
     },
     {
         data: new SlashCommandBuilder()
+            .setName('check_perms')
+            .setDescription('Check bot permissions in the current channel'),
+        async execute(interaction) {
+            const permissions = interaction.channel.permissionsFor(interaction.client.user);
+            const required = ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'EmbedLinks', 'AttachFiles'];
+            
+            const results = required.map(perm => {
+                return `${permissions.has(perm) ? '✅' : '❌'} **${perm}**`;
+            }).join('\n');
+            
+            const embed = new EmbedBuilder()
+                .setTitle('🔐 Permission Check')
+                .setDescription(`Permissions for **${interaction.client.user.tag}** in ${interaction.channel}:\n\n${results}`)
+                .setColor(0x3498db)
+                .setTimestamp();
+            
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
             .setName('test')
             .setDescription('Test AI response generation')
             .addStringOption(opt => opt.setName('message').setDescription('Test message to send to AI').setRequired(true)),
