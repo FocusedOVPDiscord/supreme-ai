@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Copy requirements first (for better caching)
+# Copy requirements
 COPY requirements.txt .
 
 # Install Python dependencies
@@ -30,12 +30,5 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
 
-# Expose port (for Koyeb)
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)" || exit 1
-
-# Run bot using Procfile
-CMD exec python bot/koyeb_run.py
+# Run bot
+CMD ["python", "-u", "bot/koyeb_run.py"]
