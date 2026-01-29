@@ -1,5 +1,9 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection, REST, Routes, Events, ChannelType, EmbedBuilder } = require('discord.js');
+// Force reset database to clear volume constraints
+const resetDb = require('./utils/reset-db');
+resetDb();
+
 const db = require('./utils/database');
 const ai = require('./utils/ai');
 const commandsList = require('./commands');

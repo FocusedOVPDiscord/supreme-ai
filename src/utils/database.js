@@ -2,19 +2,19 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// NEW DATABASE FILENAME to force fresh start on Koyeb and bypass old constraints
-const dbPath = process.env.DB_PATH || path.join(__dirname, '../../data/supreme_v2.db');
+// We use a completely new filename to ensure we aren't using the old broken volume file
+const dbPath = path.join(__dirname, '../../data/supreme_final.db');
 const dbDir = path.dirname(dbPath);
 
 if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
 }
 
-// Open database with NO foreign key enforcement
+// Open database and STICKLY DISABLE foreign keys
 const db = new Database(dbPath);
 db.pragma('foreign_keys = OFF');
 
-// Initialize Clean Schema - NO Foreign Key constraints defined in the SQL
+// Create tables without ANY foreign key keywords in the SQL
 db.exec(`
     CREATE TABLE IF NOT EXISTS training (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,14 +44,26 @@ db.exec(`
     );
 `);
 
-console.log('🚀 [SUPREME V2] Database initialized: ' + dbPath);
+console.log('🚀 [DATABASE] Supreme Final initialized at: ' + dbPath);
 
 module.exports = {
-    // --- Training System ---
-    addTraining: (query, response, category = 'general') => {
+    // CRASH-PROOF addConversation
+    addConversation: (ticketId, userId, message, isAi = 0) => {
         try {
-            return db.prepare('INSERT INTO training (query, response, category) VALUES (?, ?, ?)').run(query, response, category);
-        } catch (e) { return null; }
+            // Ensure ticket exists (no foreign key needed)
+            db.prepare("INSERT OR IGNORE INTO tickets (id, user_id, status) VALUES (?, ?, 'open')").run(ticketId, userId);
+            
+            // Insert the message
+            const stmt = db.prepare("INSERT INTO conversations (ticket_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)");
+            return stmt.run(ticketId, userId, message, isAi);
+        } catch (error) {
+            console.error('🛡️ [DATABASE SAFETY] Blocked crash:', error.message);
+            return null;
+        }
+    },
+
+    addTraining: (query, response, category = 'general') => {
+        try { return db.prepare('INSERT INTO training (query, response, category) VALUES (?, ?, ?)').run(query, response, category); } catch (e) { return null; }
     },
     
     getAllTraining: () => {
@@ -65,10 +77,8 @@ module.exports = {
     searchSimilar: (query) => {
         try {
             const q = query.toLowerCase();
-            // Priority 1: Exact Match
             let res = db.prepare('SELECT * FROM training WHERE LOWER(query) = ? LIMIT 1').get(q);
             if (res) return res;
-            // Priority 2: Fuzzy Match
             return db.prepare('SELECT * FROM training WHERE LOWER(query) LIKE ? ORDER BY usage_count DESC LIMIT 1').get(`%${q}%`);
         } catch (e) { return null; }
     },
@@ -77,23 +87,14 @@ module.exports = {
         try { return db.prepare('UPDATE training SET usage_count = usage_count + 1 WHERE id = ?').run(id); } catch (e) { return null; }
     },
     
-    // --- Ticket System ---
-    createTicket: (id, userId, category = 'general') => {
-        try {
-            return db.prepare('INSERT OR IGNORE INTO tickets (id, user_id, category) VALUES (?, ?, ?)').run(id, userId, category);
-        } catch (e) { return null; }
-    },
-    
     updateTicketStatus: (id, status) => {
-        try {
-            return db.prepare('UPDATE tickets SET status = ? WHERE id = ?').run(status, id);
-        } catch (e) { return null; }
+        try { return db.prepare('UPDATE tickets SET status = ? WHERE id = ?').run(status, id); } catch (e) { return null; }
     },
     
-    markResolvedByAI: (id) => {
-        try { return db.prepare('UPDATE tickets SET ai_resolved = 1 WHERE id = ?').run(id); } catch (e) { return null; }
+    getTicketHistory: (ticketId, limit = 10) => {
+        try { return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?').all(ticketId, limit).reverse(); } catch (e) { return []; }
     },
-    
+
     getStats: () => {
         try {
             return { 
@@ -103,24 +104,5 @@ module.exports = {
                 totalTickets: db.prepare('SELECT COUNT(*) as count FROM tickets').get().count 
             };
         } catch (e) { return { trainingCount: 0, ticketCount: 0, conversationCount: 0, totalTickets: 0 }; }
-    },
-
-    // --- Conversation Logging (CRASH PROOF) ---
-    addConversation: (ticketId, userId, message, isAi = 0) => {
-        try {
-            // Force create ticket entry if missing
-            db.prepare('INSERT OR IGNORE INTO tickets (id, user_id, status) VALUES (?, ?, \'open\')').run(ticketId, userId);
-            
-            // Log message
-            const stmt = db.prepare('INSERT INTO conversations (ticket_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)');
-            return stmt.run(ticketId, userId, message, isAi);
-        } catch (error) {
-            console.error('🛡️ [DATABASE SAFETY] Blocked crash:', error.message);
-            return null;
-        }
-    },
-    
-    getTicketHistory: (ticketId, limit = 10) => {
-        try { return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?').all(ticketId, limit).reverse(); } catch (e) { return []; }
     }
 };
