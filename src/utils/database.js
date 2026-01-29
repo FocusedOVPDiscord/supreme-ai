@@ -7,29 +7,59 @@ const fs = require('fs');
  */
 const pathConfig = require('../../pathConfig');
 const finalDbPath = pathConfig.getPath('supreme_final.db');
+
+// --- DEBUG LOGGING FOR VOLUME VERIFICATION ---
+console.log('-------------------------------------------');
+console.log('🔍 [DATABASE DEBUG] Initialization Started');
+console.log(`📂 [DATABASE DEBUG] Target Path: ${finalDbPath}`);
+console.log(`📂 [DATABASE DEBUG] Directory: ${path.dirname(finalDbPath)}`);
+console.log(`✅ [DATABASE DEBUG] Directory exists: ${fs.existsSync(path.dirname(finalDbPath))}`);
+try {
+    const testFile = path.join(path.dirname(finalDbPath), '.write_test');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+    console.log('📝 [DATABASE DEBUG] Volume Write Test: SUCCESS');
+} catch (e) {
+    console.error('❌ [DATABASE DEBUG] Volume Write Test: FAILED -', e.message);
+}
+console.log('-------------------------------------------');
+
 const db = new Database(finalDbPath);
 db.pragma('foreign_keys = OFF');
 
-// Enhanced schema for Data Collection
+// --- SCHEMA MIGRATION / INITIALIZATION ---
 db.exec(`
     CREATE TABLE IF NOT EXISTS training (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         query TEXT NOT NULL,
         response TEXT NOT NULL,
         category TEXT DEFAULT 'general',
-        next_step_id INTEGER,
-        data_point_name TEXT, -- The name of the field to save (e.g., 'items_giving', 'partner')
         usage_count INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+`);
 
+// Check and add missing columns for flow features
+const tableInfo = db.prepare("PRAGMA table_info(training)").all();
+const columns = tableInfo.map(c => c.name);
+
+if (!columns.includes('next_step_id')) {
+    console.log('🛠️ [DATABASE] Adding missing column: next_step_id');
+    db.exec("ALTER TABLE training ADD COLUMN next_step_id INTEGER");
+}
+if (!columns.includes('data_point_name')) {
+    console.log('🛠️ [DATABASE] Adding missing column: data_point_name');
+    db.exec("ALTER TABLE training ADD COLUMN data_point_name TEXT");
+}
+
+db.exec(`
     CREATE TABLE IF NOT EXISTS tickets (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
         category TEXT DEFAULT 'general',
         status TEXT DEFAULT 'open',
         current_step_id INTEGER,
-        collected_data TEXT, -- JSON object storing { "data_point_name": "user_answer" }
+        collected_data TEXT,
         ai_resolved INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -44,7 +74,7 @@ db.exec(`
     );
 `);
 
-console.log('🚀 [DATABASE] Supreme Summary Engine initialized.');
+console.log('🚀 [DATABASE] Supreme Summary Engine initialized and migrated.');
 
 module.exports = {
     // --- Flow & State Management ---
