@@ -31,6 +31,7 @@ class SupremeAIBot(commands.Bot):
             intents.dm_messages = True
             intents.members = True
             
+            # Initialize bot with tree_cls to ensure proper command tree handling
             super().__init__(command_prefix=Config.BOT_PREFIX, intents=intents)
             
             self.db = TrainingDatabase(Config.DB_PATH)
@@ -52,13 +53,13 @@ class SupremeAIBot(commands.Bot):
             print("🚀 Setting up bot...")
             logger.info("🚀 Setting up bot...")
             
-            # Setup commands
+            # 1. Setup commands FIRST
             print("Setting up commands...")
             setup_commands(self)
             print("✓ Commands setup done")
             logger.info("✓ Commands setup done")
             
-            # Check Groq connection
+            # 2. Check Groq connection
             self.groq_ready = await self.ai.check_health()
             if self.groq_ready:
                 print("✓ Groq AI ready")
@@ -67,7 +68,7 @@ class SupremeAIBot(commands.Bot):
                 print("✗ Groq AI not ready")
                 logger.warning("✗ Groq AI not ready")
             
-            # Load ticket listener
+            # 3. Load ticket listener
             try:
                 from ticket_listener import TicketListener
                 await self.add_cog(TicketListener(self))
@@ -78,10 +79,15 @@ class SupremeAIBot(commands.Bot):
                 logger.error(f"✗ Failed to load listener: {e}")
                 traceback.print_exc()
             
-            # Sync commands - FIXED: Add guild-specific sync for instant registration
+            # 4. Sync commands - FIXED: Ensure commands are in the tree before syncing
             try:
                 print("🔄 Syncing commands...")
                 logger.info("🔄 Syncing commands...")
+                
+                # Log the number of commands in the tree for debugging
+                all_commands = self.tree.get_commands()
+                print(f"DEBUG: Commands in tree: {[cmd.name for cmd in all_commands]}")
+                logger.info(f"DEBUG: Commands in tree: {[cmd.name for cmd in all_commands]}")
                 
                 # If DISCORD_GUILD_ID is set, sync to that guild for instant registration
                 if Config.DISCORD_GUILD_ID and str(Config.DISCORD_GUILD_ID) != "0":

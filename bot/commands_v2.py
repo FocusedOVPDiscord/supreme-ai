@@ -109,15 +109,16 @@ def setup_commands(bot):
     print("Setting up commands...")
     logger.info("Setting up commands...")
     
-    # Create command groups
+    # 1. Create command groups
     train_group = TrainGroup(bot)
     ticket_group = TicketGroup(bot)
     
-    # Add groups to command tree
+    # 2. Add groups to command tree
     bot.tree.add_command(train_group)
     bot.tree.add_command(ticket_group)
     
-    # Add standalone sync command for manual re-sync
+    # 3. Add standalone commands directly to the tree
+    
     @bot.tree.command(name="sync", description="Manually sync slash commands (Admin only)")
     @app_commands.default_permissions(administrator=True)
     async def sync_commands(interaction: discord.Interaction):
@@ -145,7 +146,6 @@ def setup_commands(bot):
             await interaction.followup.send(f"❌ Sync failed: {e}", ephemeral=True)
             logger.error(f"Manual sync failed: {e}")
     
-    # Add other standalone commands if needed
     @bot.tree.command(name="status", description="Check bot status")
     async def status(interaction: discord.Interaction):
         await interaction.response.defer()
@@ -156,5 +156,10 @@ def setup_commands(bot):
         embed.add_field(name="Training Entries", value=str(stats['total_training_entries']), inline=True)
         await interaction.followup.send(embed=embed)
 
+    # Log the commands we just added
+    added_commands = [cmd.name for cmd in bot.tree.get_commands()]
+    print(f"✓ Commands added to tree: {added_commands}")
+    logger.info(f"✓ Commands added to tree: {added_commands}")
+    
     print("✓ Commands setup complete")
     logger.info("✓ Commands setup complete")
