@@ -1,57 +1,54 @@
 const ai = require('./ai');
 
 /**
- * Advanced Trade Logic Handler - STRICT VERSION WITH TOKENS
- * This script ensures the bot stays on topic and includes token counts.
+ * EXACT TRANSCRIPT REPLICATION LOGIC
+ * This script mirrors the behavior seen in the Ticket King transcript.
  */
 module.exports = {
     handleTradeFlow: async (message, collectedData = {}, isStaffInvolved = false) => {
-        // 1. Staff Check
-        if (isStaffInvolved) {
-            return { 
-                bot_response: "⚠️ AI has been disabled for this ticket. A staff member has joined the conversation.", 
-                is_complete: false,
-                disabled: true
-            };
-        }
+        if (isStaffInvolved) return null;
 
-        // Generate a simulated token count similar to the user's example
-        // In a real production environment, this would come from the AI provider's response metadata
-        const tokenCount = Math.floor(Math.random() * (10500 - 9000) + 9000);
+        // Exact wording from transcript
+        const questions = {
+            greeting: "Hi, how can I help?",
+            ask_items: "What do you give and what does your trade partner give?",
+            ask_user_qty: (item) => `What quantity of the ${item} do you give?`,
+            ask_partner_qty: (item) => `What quantity of ${item} does your trade partner give?`,
+            ask_tip: "Do you want to add a priority tip for faster handling? (yes/no)",
+            ask_partner_id: "Who is your trade partner? Please @mention them or send their Discord ID."
+        };
 
-        const systemPrompt = `You are a professional Middleman Bot. Your job is to extract trade details.
+        const systemPrompt = `You are mirroring the "Solvra | AiBOT" behavior from the transcript.
         
-        STRICT RULES:
-        1. STAY ON TOPIC: Redirect off-topic messages back to the trade.
-        2. EXTRACTION: Identify "user_item", "user_quantity", "partner_item", "partner_quantity", and "trade_partner".
-        3. MISSING INFO: Ask for missing details immediately.
-        4. SUMMARY: Generate the "# Trade Setup (Final)" table when complete.
-        5. FORMAT: Every response MUST end with a new line containing the token count in this exact format: -# [NUMBER] tokens
+        SEQUENCE:
+        1. If user says "hello there" -> Response: "${questions.greeting}"
+        2. If user says "i want to trade" -> Response: "${questions.ask_items}"
+        3. After items are named (e.g. "drag" and "gorgonzilla"):
+           - If user quantity missing -> Ask: "What quantity of the [user_item] do you give?"
+           - If partner quantity missing -> Ask: "What quantity of [partner_item] does your trade partner give?"
+        4. After quantities -> Ask: "${questions.ask_tip}"
+        5. After tip -> Ask: "${questions.ask_partner_id}"
+        6. Final -> Generate the "# Trade Setup (Final)" table.
 
-        Current Collected Data: ${JSON.stringify(collectedData)}
+        MANDATORY: Every single response MUST end with exactly: \\n-# [9000-10500] tokens
+        
+        Current Data: ${JSON.stringify(collectedData)}
         User Message: "${message}"
 
-        Response format:
+        Return JSON:
         {
-            "extracted_data": { ... },
-            "bot_response": "Your response text\\n-# ${tokenCount} tokens",
+            "extracted_data": { "user_item": "...", "partner_item": "...", "user_qty": "...", "partner_qty": "...", "tip": "...", "partner_id": "..." },
+            "bot_response": "EXACT_WORDING_FROM_TRANSCRIPT\\n-# 9XXX tokens",
             "is_complete": true/false
         }`;
 
         const response = await ai.generateResponse(message, `System: ${systemPrompt}`);
         
         try {
-            const parsed = JSON.parse(response);
-            // Ensure the token line is present even if the AI forgot
-            if (!parsed.bot_response.includes("-#")) {
-                parsed.bot_response += `\n-# ${tokenCount} tokens`;
-            }
-            return parsed;
+            return JSON.parse(response);
         } catch (e) {
-            return { 
-                bot_response: `${response}\n-# ${tokenCount} tokens`, 
-                is_complete: false 
-            };
+            const tokenCount = Math.floor(Math.random() * (10500 - 9000) + 9000);
+            return { bot_response: `${response}\n-# ${tokenCount} tokens`, is_complete: false };
         }
     }
 };
