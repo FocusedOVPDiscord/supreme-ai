@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, REST, Routes, Events, ChannelType, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, REST, Routes, Events, ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const db = require('./utils/database');
 const ai = require('./utils/ai');
 const commandsList = require('./commands');
@@ -42,6 +42,12 @@ client.once(Events.ClientReady, async () => {
 // Helper: Ticket Channel Detection
 function isTicketChannel(channel) {
     if (!channel || ![ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread].includes(channel.type)) return false;
+    
+    // Restrict to a specific category if TICKET_CATEGORY_ID is set
+    if (process.env.TICKET_CATEGORY_ID && channel.parent?.id !== process.env.TICKET_CATEGORY_ID) {
+        return false;
+    }
+    
     const name = channel.name.toLowerCase();
     return /ticket|support|help|claim|order|issue/i.test(name) || /^\d+$/.test(name);
 }
@@ -95,12 +101,27 @@ client.on(Events.MessageCreate, async message => {
     
     const ticketId = getTicketId(message.channel.name);
     db.addConversation(ticketId, message.author.id, message.content);
+
+    // Staff Detection: Check if the user has ManageMessages permission (a good proxy for staff)
+    // If a staff member sends a message, disable the AI for this ticket.
+    if (message.member && message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+        // Check if the AI is already disabled to avoid spamming the message
+        const ticket = db.getTicket(ticketId);
+        if (ticket && ticket.current_step_id !== -1) { // -1 means disabled
+            db.updateTicketState(ticketId, -1, {}); // Set current_step_id to -1 to disable AI
+            await message.channel.send('⚠️ AI has been disabled for this ticket. Reason: A staff member has joined the conversation.');
+        }
+        return; // Stop processing the message
+    }
     
     try {
         await message.channel.sendTyping();
         
         // --- STEP-BY-STEP FLOW LOGIC ---
         const ticket = db.getTicket(ticketId);
+
+        // If AI is disabled (current_step_id = -1), do not process
+        if (ticket && ticket.current_step_id === -1) return;
         
         if (ticket && ticket.current_step_id) {
             const currentStep = db.getTrainingById(ticket.current_step_id);
