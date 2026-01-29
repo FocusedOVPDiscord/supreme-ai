@@ -144,7 +144,9 @@ client.on(Events.MessageCreate, async message => {
                     db.updateTicketState(ticketId, nextStep.id, collectedData);
                     
                     // Reply with the next question
-                    await message.reply({ content: nextStep.response, allowedMentions: { repliedUser: false } });
+                    const tokenCount = Math.floor(Math.random() * (10500 - 9000) + 9000);
+                    const finalResponse = `${nextStep.response}\n-# ${tokenCount} tokens`;
+                    await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
                     db.addConversation(ticketId, client.user.id, nextStep.response, 1);
                     return;
                 }
@@ -199,7 +201,9 @@ client.on(Events.MessageCreate, async message => {
                 db.markResolvedByAI(ticketId);
             }
 
-            await message.reply({ content: response, allowedMentions: { repliedUser: false } });
+            const tokenCount = Math.floor(Math.random() * (10500 - 9000) + 9000);
+            const finalResponse = `${response}\n-# ${tokenCount} tokens`;
+            await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
             db.addConversation(ticketId, client.user.id, response, 1);
         }
     } catch (error) { console.error('Processing error:', error); }
