@@ -4,12 +4,11 @@ const fs = require('fs');
 
 /**
  * DATABASE PERSISTENCE CONFIGURATION
- * We use /app/data/supreme_final.db which matches the Koyeb Volume mount path.
  */
 const dbPath = '/app/data/supreme_final.db';
 const dbDir = path.dirname(dbPath);
 
-// Fallback for local testing if /app/data doesn't exist
+// Fallback for local testing
 const finalDbPath = fs.existsSync('/app') ? dbPath : path.join(__dirname, '../../data/supreme_final.db');
 const finalDbDir = path.dirname(finalDbPath);
 
@@ -21,18 +20,18 @@ if (!fs.existsSync(finalDbDir)) {
     }
 }
 
-// Open database and STRICTLY DISABLE foreign keys
 const db = new Database(finalDbPath);
 db.pragma('foreign_keys = OFF');
 
-// Create tables without ANY foreign key keywords in the SQL
+// Enhanced schema for Data Collection
 db.exec(`
     CREATE TABLE IF NOT EXISTS training (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         query TEXT NOT NULL,
         response TEXT NOT NULL,
         category TEXT DEFAULT 'general',
-        next_step_id INTEGER, -- Link to another training ID for multi-step flows
+        next_step_id INTEGER,
+        data_point_name TEXT, -- The name of the field to save (e.g., 'items_giving', 'partner')
         usage_count INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -42,8 +41,8 @@ db.exec(`
         user_id TEXT NOT NULL,
         category TEXT DEFAULT 'general',
         status TEXT DEFAULT 'open',
-        current_step_id INTEGER, -- Tracks which step the user is on in a flow
-        collected_data TEXT, -- JSON string to store form data like quantity, items, etc.
+        current_step_id INTEGER,
+        collected_data TEXT, -- JSON object storing { "data_point_name": "user_answer" }
         ai_resolved INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -58,21 +57,21 @@ db.exec(`
     );
 `);
 
-console.log('🚀 [DATABASE] Supreme Flow Engine initialized at: ' + finalDbPath);
+console.log('🚀 [DATABASE] Supreme Summary Engine initialized.');
 
 module.exports = {
     // --- Flow & State Management ---
-    getTicketState: (ticketId) => {
+    getTicket: (ticketId) => {
         try {
-            return db.prepare("SELECT current_step_id, collected_data FROM tickets WHERE id = ?").get(ticketId);
+            return db.prepare("SELECT * FROM tickets WHERE id = ?").get(ticketId);
         } catch (e) { return null; }
     },
 
-    updateTicketState: (ticketId, stepId, data = null) => {
+    updateTicketState: (ticketId, stepId, collectedData = null) => {
         try {
-            if (data) {
+            if (collectedData !== null) {
                 const stmt = db.prepare("UPDATE tickets SET current_step_id = ?, collected_data = ? WHERE id = ?");
-                return stmt.run(stepId, JSON.stringify(data), ticketId);
+                return stmt.run(stepId, JSON.stringify(collectedData), ticketId);
             } else {
                 const stmt = db.prepare("UPDATE tickets SET current_step_id = ? WHERE id = ?");
                 return stmt.run(stepId, ticketId);
@@ -99,10 +98,10 @@ module.exports = {
     },
 
     // --- Training System ---
-    addTraining: (query, response, category = 'general', nextStepId = null) => {
+    addTraining: (query, response, category = 'general', nextStepId = null, dataPointName = null) => {
         try { 
-            const stmt = db.prepare('INSERT INTO training (query, response, category, next_step_id) VALUES (?, ?, ?, ?)');
-            return stmt.run(query, response, category, nextStepId); 
+            const stmt = db.prepare('INSERT INTO training (query, response, category, next_step_id, data_point_name) VALUES (?, ?, ?, ?, ?)');
+            return stmt.run(query, response, category, nextStepId, dataPointName); 
         } catch (e) { return null; }
     },
     

@@ -38,7 +38,8 @@ const commands = [
                     .addStringOption(opt => opt.setName('question').setDescription('The question or trigger phrase').setRequired(true))
                     .addStringOption(opt => opt.setName('answer').setDescription('The response the AI should give').setRequired(true))
                     .addStringOption(opt => opt.setName('category').setDescription('Category (e.g., billing, technical, general)').setRequired(false))
-                    .addIntegerOption(opt => opt.setName('next_step').setDescription('ID of the next step in the flow (optional)').setRequired(false))
+                    .addIntegerOption(opt => opt.setName('next_step').setDescription('ID of the next step in the flow').setRequired(false))
+                    .addStringOption(opt => opt.setName('data_point').setDescription('Name of the data to collect from user answer (e.g., "item", "quantity")').setRequired(false))
             )
             .addSubcommand(sub => 
                 sub.setName('list')
@@ -49,11 +50,6 @@ const commands = [
                 sub.setName('delete')
                     .setDescription('Delete training data')
                     .addIntegerOption(opt => opt.setName('id').setDescription('The ID to delete').setRequired(true))
-            )
-            .addSubcommand(sub =>
-                sub.setName('search')
-                    .setDescription('Search for training data')
-                    .addStringOption(opt => opt.setName('query').setDescription('Search query').setRequired(true))
             ),
         async execute(interaction) {
             const sub = interaction.options.getSubcommand();
@@ -63,9 +59,10 @@ const commands = [
                 const answer = interaction.options.getString('answer');
                 const category = interaction.options.getString('category') || 'general';
                 const nextStep = interaction.options.getInteger('next_step');
+                const dataPoint = interaction.options.getString('data_point');
                 
                 try {
-                    const result = db.addTraining(question, answer, category, nextStep);
+                    const result = db.addTraining(question, answer, category, nextStep, dataPoint);
                     const embed = new EmbedBuilder()
                         .setTitle('✅ Training Added')
                         .setColor(0x00ff00)
@@ -73,10 +70,11 @@ const commands = [
                             { name: '🆔 ID', value: result.lastInsertRowid.toString(), inline: true },
                             { name: '📁 Category', value: category, inline: true },
                             { name: '🔗 Next Step ID', value: nextStep ? nextStep.toString() : 'None', inline: true },
+                            { name: '📊 Collecting', value: dataPoint ? `"${dataPoint}"` : 'Nothing', inline: true },
                             { name: '❓ Question', value: question },
                             { name: '💬 Answer', value: answer }
                         )
-                        .setFooter({ text: 'Use the ID to link steps for multi-step flows!' })
+                        .setFooter({ text: 'Flow Master: Link steps together to create automated forms!' })
                         .setTimestamp();
                     await interaction.reply({ embeds: [embed] });
                 } catch (error) {
@@ -90,7 +88,7 @@ const commands = [
                 
                 const chunk = data.slice(0, 10);
                 const description = chunk.map(item => 
-                    `**#${item.id}** [${item.category}] ${item.query.substring(0, 40)}${item.query.length > 40 ? '...' : ''}\n└ Next Step: ${item.next_step_id || 'None'}`
+                    `**#${item.id}** [${item.category}] ${item.query.substring(0, 40)}${item.query.length > 40 ? '...' : ''}\n└ Next: ${item.next_step_id || 'End'} | Collecting: ${item.data_point_name || 'None'}`
                 ).join('\n\n');
                 
                 const embed = new EmbedBuilder()
@@ -109,23 +107,6 @@ const commands = [
                 } catch (error) {
                     await interaction.reply({ content: '❌ Failed to delete entry', ephemeral: true });
                 }
-                
-            } else if (sub === 'search') {
-                const query = interaction.options.getString('query');
-                const result = db.searchSimilar(query);
-                if (!result) return interaction.reply({ content: '🔍 No matching training data found.', ephemeral: true });
-                
-                const embed = new EmbedBuilder()
-                    .setTitle('🔍 Search Result')
-                    .setColor(0x9b59b6)
-                    .addFields(
-                        { name: 'ID', value: result.id.toString(), inline: true },
-                        { name: 'Next Step', value: result.next_step_id ? result.next_step_id.toString() : 'None', inline: true },
-                        { name: 'Question', value: result.query },
-                        { name: 'Answer', value: result.response }
-                    )
-                    .setTimestamp();
-                await interaction.reply({ embeds: [embed] });
             }
         }
     },
@@ -151,7 +132,7 @@ const commands = [
                 const ticketId = id.startsWith('ticket-') ? id : `ticket-${id.padStart(4, '0')}`;
                 try {
                     db.updateTicketStatus(ticketId, 'closed');
-                    db.updateTicketState(ticketId, null); // Clear flow state
+                    db.updateTicketState(ticketId, null, {}); // Reset state
                     await interaction.reply({ content: `✅ Ticket **${ticketId}** closed.` });
                 } catch (error) { await interaction.reply({ content: '❌ Failed to close ticket', ephemeral: true }); }
             } else if (sub === 'list') {

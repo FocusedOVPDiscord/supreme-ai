@@ -63,7 +63,6 @@ client.on(Events.ChannelCreate, async channel => {
                 .setTitle('👋 Welcome to Support')
                 .setDescription('Hello! I am the **AI Support Assistant**. I\'ve been assigned to your ticket to provide instant help.\n\n**How I can help you today:**\n- ⚡ Provide instant answers from our knowledge base\n- 🛠️ Troubleshoot common technical issues\n- 📝 Collect details for our human staff\n\n**Please describe your request in detail below.**')
                 .setColor(0x5865F2)
-                .addFields({ name: 'Estimated AI Response Time', value: '⚡ Instant', inline: true })
                 .setFooter({ text: 'AI Support Powered by Groq Llama 3' })
                 .setTimestamp();
 
@@ -101,30 +100,52 @@ client.on(Events.MessageCreate, async message => {
         await message.channel.sendTyping();
         
         // --- STEP-BY-STEP FLOW LOGIC ---
-        const state = db.getTicketState(ticketId);
+        const ticket = db.getTicket(ticketId);
         
-        // If the user is currently in a flow (current_step_id is set)
-        if (state && state.current_step_id) {
-            const currentStep = db.getTrainingById(state.current_step_id);
+        if (ticket && ticket.current_step_id) {
+            const currentStep = db.getTrainingById(ticket.current_step_id);
+            let collectedData = ticket.collected_data ? JSON.parse(ticket.collected_data) : {};
+            
+            // Save current answer if this step was collecting data
+            if (currentStep && currentStep.data_point_name) {
+                collectedData[currentStep.data_point_name] = message.content;
+            }
             
             if (currentStep && currentStep.next_step_id) {
                 const nextStep = db.getTrainingById(currentStep.next_step_id);
                 if (nextStep) {
-                    // Update state to the next step
-                    db.updateTicketState(ticketId, nextStep.id);
+                    // Update state to the next step and save data
+                    db.updateTicketState(ticketId, nextStep.id, collectedData);
                     
-                    // Reply with the next question in the flow
+                    // Reply with the next question
                     await message.reply({ content: nextStep.response, allowedMentions: { repliedUser: false } });
                     db.addConversation(ticketId, client.user.id, nextStep.response, 1);
-                    return; // Exit early as we've handled the flow step
-                } else {
-                    // End of flow
-                    db.updateTicketState(ticketId, null);
+                    return;
                 }
-            } else {
-                // End of flow
-                db.updateTicketState(ticketId, null);
             }
+            
+            // End of Flow - Generate Summary
+            db.updateTicketState(ticketId, null, collectedData);
+            
+            // Use AI to generate a professional summary embed based on collected data
+            const summaryPrompt = `Create a professional Discord summary based on this data: ${JSON.stringify(collectedData)}. 
+            Format it clearly with sections. Mention that users should type "confirm" to finalize.
+            The user who opened the ticket is <@${ticket.user_id}>.`;
+            
+            const aiSummary = await ai.generateResponse(summaryPrompt, "You are a professional support assistant. Create a clear summary of the user's request.");
+            
+            if (aiSummary) {
+                const summaryEmbed = new EmbedBuilder()
+                    .setTitle('📋 Summary & Confirmation')
+                    .setDescription(aiSummary)
+                    .setColor(0xFFAA00)
+                    .setFooter({ text: 'Type "confirm" to proceed or "cancel" to restart.' })
+                    .setTimestamp();
+                
+                await message.channel.send({ embeds: [summaryEmbed] });
+                db.addConversation(ticketId, client.user.id, "Summary sent", 1);
+            }
+            return;
         }
         
         // --- STANDARD KNOWLEDGE BASE / AI LOGIC ---
@@ -135,13 +156,11 @@ client.on(Events.MessageCreate, async message => {
             response = match.response;
             db.incrementUsage(match.id);
             
-            // If this match starts a flow (has a next_step_id)
             if (match.next_step_id) {
-                db.updateTicketState(ticketId, match.id);
-                console.log(`🚀 [FLOW START] Ticket ${ticketId} started flow from training ID ${match.id}`);
+                // Initialize flow state
+                db.updateTicketState(ticketId, match.id, {});
+                console.log(`🚀 [FLOW START] Ticket ${ticketId} started flow.`);
             }
-            
-            console.log(`✅ [TRAINED] Matched: "${message.content.substring(0, 30)}..."`);
         } else {
             const history = db.getTicketHistory(ticketId, 8);
             const context = history.map(h => `${h.is_ai ? 'AI' : 'User'}: ${h.message}`).join('\n');
@@ -160,7 +179,6 @@ client.on(Events.MessageCreate, async message => {
     } catch (error) { console.error('Processing error:', error); }
 });
 
-// 4. Error Protection
 process.on('unhandledRejection', error => console.error('Unhandled Rejection:', error));
 process.on('uncaughtException', error => console.error('Uncaught Exception:', error));
 
