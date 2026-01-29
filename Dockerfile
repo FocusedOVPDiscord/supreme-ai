@@ -1,34 +1,19 @@
-# Supreme AI Bot - Koyeb Deployment
-FROM python:3.11-slim
+FROM node:20-slim
 
-# Set working directory
+# Install build tools for better-sqlite3
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+COPY package*.json ./
+RUN npm install --production
 
-# Upgrade pip
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
-
-# Copy requirements
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy entire project
 COPY . .
 
-# Create data and logs directories
-RUN mkdir -p data logs
+# Create data directory for SQLite
+RUN mkdir -p data
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app
+ENV NODE_ENV=production
+ENV DB_PATH=/app/data/bot.db
 
-# Run bot
-CMD ["python", "-u", "bot/koyeb_run.py"]
+CMD ["node", "src/index.js"]

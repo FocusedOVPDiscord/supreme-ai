@@ -1,9 +1,0 @@
-{
-  "version": "1",
-  "build": {
-    "builder": "dockerfile"
-  },
-  "run": {
-    "runCommand": "python -u bot/koyeb_run.py"
-  }
-}
