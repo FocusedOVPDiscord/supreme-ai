@@ -63,6 +63,11 @@ const commands = [
                 
                 try {
                     const result = db.addTraining(question, answer, category, nextStep, dataPoint);
+                    
+                    if (!result || result.lastInsertRowid === undefined) {
+                        throw new Error('Database failed to return a valid ID. Check if the volume is writable.');
+                    }
+
                     const embed = new EmbedBuilder()
                         .setTitle('✅ Training Added')
                         .setColor(0x00ff00)
@@ -79,7 +84,9 @@ const commands = [
                     await interaction.reply({ embeds: [embed] });
                 } catch (error) {
                     console.error('❌ [TRAIN ERROR]', error);
-                    await interaction.reply({ content: `❌ Failed to add training data: ${error.message}`, ephemeral: true });
+                    let errorMsg = error.message;
+                    if (errorMsg.includes('readonly')) errorMsg = 'Database is read-only. Ensure your Koyeb volume is mounted correctly with write permissions.';
+                    await interaction.reply({ content: `❌ **Training Failed:** ${errorMsg}`, ephemeral: true });
                 }
                 
             } else if (sub === 'list') {

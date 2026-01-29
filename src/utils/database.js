@@ -86,10 +86,8 @@ module.exports = {
 
     // --- Training System ---
     addTraining: (query, response, category = 'general', nextStepId = null, dataPointName = null) => {
-        try { 
-            const stmt = db.prepare('INSERT INTO training (query, response, category, next_step_id, data_point_name) VALUES (?, ?, ?, ?, ?)');
-            return stmt.run(query, response, category, nextStepId, dataPointName); 
-        } catch (e) { return null; }
+        const stmt = db.prepare('INSERT INTO training (query, response, category, next_step_id, data_point_name) VALUES (?, ?, ?, ?, ?)');
+        return stmt.run(query, response, category, nextStepId, dataPointName); 
     },
     
     getAllTraining: () => {
