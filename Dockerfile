@@ -15,7 +15,7 @@ RUN npm install --production
 COPY . .
 
 # Ensure data directory exists for persistent storage
-RUN mkdir -p data
+RUN mkdir -p /app/data && chmod 777 /app/data
 
 # Environment configuration
 ENV NODE_ENV=production
