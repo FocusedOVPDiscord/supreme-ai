@@ -112,84 +112,72 @@ function getTicketId(channelName) {
     return name;
 }
 
-client.on(Events.MessageCreate, async message => {
-    // Ignore bot messages
-    if (message.author.bot) return;
+// AI Ticket Bot Style - Auto Greeting on Channel Creation
+client.on(Events.ChannelCreate, async channel => {
+    if (!isTicketChannel(channel)) return;
     
-    // Check if this is a ticket channel
-    if (!isTicketChannel(message.channel)) {
-        // Log for debugging if it's likely a ticket but missed by pattern
-        if (message.channel.name.toLowerCase().includes('ticket') || 
-            message.channel.name.toLowerCase().includes('support')) {
-            console.log(`[DEBUG] Potential ticket channel MISSED: ${message.channel.name}`);
+    setTimeout(async () => {
+        try {
+            const permissions = channel.permissionsFor(client.user);
+            if (!permissions || !permissions.has(['ViewChannel', 'SendMessages'])) return;
+
+            const welcomeEmbed = new EmbedBuilder()
+                .setTitle('🎫 Support Ticket Opened')
+                .setDescription('Hello! I am the **Supreme AI Assistant**. I\'ve been notified of your ticket.\n\nWhile you wait for a staff member, please **describe your issue in detail** below. I will try to provide an instant solution based on our knowledge base!')
+                .setColor(0x3498db)
+                .setFooter({ text: 'AI Support Powered by Groq' })
+                .setTimestamp();
+
+            await channel.send({ embeds: [welcomeEmbed] });
+            console.log(`✨ [AI TICKET] Sent welcome message in new ticket: ${channel.name}`);
+        } catch (err) {
+            console.error('Error sending ticket welcome:', err);
         }
-        return;
-    }
+    }, 2000); // Wait 2 seconds for other bots to finish setup
+});
+
+client.on(Events.MessageCreate, async message => {
+    if (message.author.bot) return;
+    if (!isTicketChannel(message.channel)) return;
     
-    // Check permissions
     const permissions = message.channel.permissionsFor(client.user);
-    if (!permissions || !permissions.has(['ViewChannel', 'SendMessages', 'ReadMessageHistory'])) {
-        console.log(`[ERROR] Missing permissions in ${message.channel.name}: ViewChannel, SendMessages, or ReadMessageHistory`);
-        return;
-    }
+    if (!permissions || !permissions.has(['ViewChannel', 'SendMessages', 'ReadMessageHistory'])) return;
     
     const ticketId = getTicketId(message.channel.name);
-    console.log(`📩 Message in ticket channel: ${message.channel.name} (ID: ${ticketId})`);
-    
-    // Store user message in database
     db.addConversation(ticketId, message.author.id, message.content);
     
     try {
-        // Show typing indicator
         await message.channel.sendTyping();
         
-        // First, search for trained responses
+        // AI TICKET BOT LOGIC:
+        // 1. Check for specific trained triggers
+        // 2. Use Groq AI with the full context of the ticket
+        
         const match = db.searchSimilar(message.content);
         let response;
         
         if (match && match.response) {
-            console.log(`✅ Found trained response for: "${message.content.substring(0, 50)}..."`);
             response = match.response;
             db.incrementUsage(match.id);
+            console.log(`✅ [TRAINED] Responding to "${message.content.substring(0, 20)}..."`);
         } else {
-            // No trained response found, use Groq AI
-            console.log(`🤖 Generating AI response for: "${message.content.substring(0, 50)}..."`);
-            
-            // Get conversation history for context
-            const history = db.getTicketHistory(ticketId, 5);
-            const contextMessages = history.map(h => `${h.is_ai ? 'AI' : 'User'}: ${h.message}`).join('\n');
+            const history = db.getTicketHistory(ticketId, 6);
+            const contextMessages = history.map(h => `${h.is_ai ? 'Assistant' : 'Customer'}: ${h.message}`).join('\n');
             
             response = await ai.generateResponse(message.content, contextMessages);
-            
-            if (!response) {
-                console.error('❌ AI generation failed, using fallback message');
-                response = "I'm having trouble generating a response right now. A staff member will assist you shortly. 🙏";
-            }
         }
         
         if (response) {
-            // Send the response
+            // Use a clean, professional reply style like aiticketbot.com
             await message.reply({ 
                 content: response, 
                 allowedMentions: { repliedUser: false } 
             });
             
-            // Store AI response in database
             db.addConversation(ticketId, client.user.id, response, 1);
-            console.log(`✅ Response sent in ${ticketId}`);
         }
     } catch (error) {
-        console.error('❌ Ticket Listener Error:', error);
-        
-        // Try to send error message to user
-        try {
-            await message.reply({
-                content: "⚠️ I encountered an error. Please wait for a staff member to assist you.",
-                allowedMentions: { repliedUser: false }
-            });
-        } catch (replyError) {
-            console.error('❌ Could not send error message:', replyError);
-        }
+        console.error('❌ Ticket Processing Error:', error);
     }
 });
 
