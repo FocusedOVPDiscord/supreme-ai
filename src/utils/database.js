@@ -5,21 +5,8 @@ const fs = require('fs');
 /**
  * DATABASE PERSISTENCE CONFIGURATION
  */
-const dbPath = '/app/data/supreme_final.db';
-const dbDir = path.dirname(dbPath);
-
-// Fallback for local testing
-const finalDbPath = fs.existsSync('/app') ? dbPath : path.join(__dirname, '../../data/supreme_final.db');
-const finalDbDir = path.dirname(finalDbPath);
-
-if (!fs.existsSync(finalDbDir)) {
-    try {
-        fs.mkdirSync(finalDbDir, { recursive: true });
-    } catch (e) {
-        console.warn('⚠️ Could not create directory, using local fallback');
-    }
-}
-
+const pathConfig = require('../../pathConfig');
+const finalDbPath = pathConfig.getPath('supreme_final.db');
 const db = new Database(finalDbPath);
 db.pragma('foreign_keys = OFF');
 
