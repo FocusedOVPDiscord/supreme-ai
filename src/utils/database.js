@@ -86,6 +86,7 @@ module.exports = {
 
     updateTicketState: (ticketId, stepId, collectedData = null) => {
         try {
+            console.log(`💾 [DATABASE DEBUG] Updating Ticket State: ${ticketId} | Step: ${stepId}`);
             if (collectedData !== null) {
                 const stmt = db.prepare("UPDATE tickets SET current_step_id = ?, collected_data = ? WHERE id = ?");
                 return stmt.run(stepId, JSON.stringify(collectedData), ticketId);
@@ -93,7 +94,10 @@ module.exports = {
                 const stmt = db.prepare("UPDATE tickets SET current_step_id = ? WHERE id = ?");
                 return stmt.run(stepId, ticketId);
             }
-        } catch (e) { return null; }
+        } catch (e) { 
+            console.error(`❌ [DATABASE ERROR] updateTicketState:`, e.message);
+            return null; 
+        }
     },
 
     getTrainingById: (id) => {
@@ -105,6 +109,7 @@ module.exports = {
     // --- Conversation Logging ---
     addConversation: (ticketId, userId, message, isAi = 0) => {
         try {
+            console.log(`📝 [DATABASE DEBUG] Saving Conversation: [${ticketId}] ${isAi ? 'AI' : 'User'}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
             db.prepare("INSERT OR IGNORE INTO tickets (id, user_id, status) VALUES (?, ?, 'open')").run(ticketId, userId);
             const stmt = db.prepare("INSERT INTO conversations (ticket_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)");
             return stmt.run(ticketId, userId, message, isAi);
@@ -116,6 +121,7 @@ module.exports = {
 
     // --- Training System ---
     addTraining: (query, response, category = 'general', nextStepId = null, dataPointName = null) => {
+        console.log(`📚 [DATABASE DEBUG] Adding Training Entry: ${query.substring(0, 30)}...`);
         const stmt = db.prepare('INSERT INTO training (query, response, category, next_step_id, data_point_name) VALUES (?, ?, ?, ?, ?)');
         return stmt.run(query, response, category, nextStepId, dataPointName); 
     },
@@ -129,7 +135,10 @@ module.exports = {
     },
     
     deleteTraining: (id) => {
-        try { return db.prepare('DELETE FROM training WHERE id = ?').run(id); } catch (e) { return null; }
+        try { 
+            console.log(`🗑️ [DATABASE DEBUG] Deleting Training ID: ${id}`);
+            return db.prepare('DELETE FROM training WHERE id = ?').run(id); 
+        } catch (e) { return null; }
     },
     
     searchSimilar: (query) => {
@@ -146,7 +155,10 @@ module.exports = {
     },
     
     updateTicketStatus: (id, status) => {
-        try { return db.prepare('UPDATE tickets SET status = ? WHERE id = ?').run(status, id); } catch (e) { return null; }
+        try { 
+            console.log(`🎫 [DATABASE DEBUG] Updating Ticket Status: ${id} -> ${status}`);
+            return db.prepare('UPDATE tickets SET status = ? WHERE id = ?').run(status, id); 
+        } catch (e) { return null; }
     },
     
     getTicketHistory: (ticketId, limit = 10) => {
@@ -169,7 +181,10 @@ module.exports = {
     },
 
     markResolvedByAI: (id) => {
-        try { return db.prepare('UPDATE tickets SET ai_resolved = 1 WHERE id = ?').run(id); } catch (e) { return null; }
+        try { 
+            console.log(`✅ [DATABASE DEBUG] Ticket Marked Resolved by AI: ${id}`);
+            return db.prepare('UPDATE tickets SET ai_resolved = 1 WHERE id = ?').run(id); 
+        } catch (e) { return null; }
     },
 
     getStats: () => {
