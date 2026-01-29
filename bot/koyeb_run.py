@@ -9,6 +9,7 @@ import asyncio
 from pathlib import Path
 import sys
 import os
+import traceback
 
 # Add bot directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -32,69 +33,74 @@ class SupremeAIBot(commands.Bot):
     """Main bot class for Koyeb deployment"""
     
     def __init__(self):
-        intents = discord.Intents.default()
-        intents.message_content = True
-        intents.guilds = True
-        intents.guild_messages = True
-        intents.dm_messages = True
-        intents.members = True
-        
-        super().__init__(command_prefix=Config.BOT_PREFIX, intents=intents)
-        
-        self.db = TrainingDatabase(Config.DB_PATH)
-        self.ai = GroqClient(Config.GROQ_API_KEY)
-        self.groq_ready = False
+        try:
+            intents = discord.Intents.default()
+            intents.message_content = True
+            intents.guilds = True
+            intents.guild_messages = True
+            intents.dm_messages = True
+            intents.members = True
+            
+            super().__init__(command_prefix=Config.BOT_PREFIX, intents=intents)
+            
+            self.db = TrainingDatabase(Config.DB_PATH)
+            self.ai = GroqClient(Config.GROQ_API_KEY)
+            self.groq_ready = False
+            
+            logger.info("✓ Bot initialized successfully")
+        except Exception as e:
+            logger.error(f"✗ Failed to initialize bot: {e}")
+            traceback.print_exc()
+            raise
     
     async def setup_hook(self):
         """Setup bot before connecting"""
-        logger.info("🚀 Setting up Supreme AI Bot for Koyeb...")
-        
-        # Check Groq connection
-        self.groq_ready = await self.ai.check_health()
-        if self.groq_ready:
-            logger.info("✓ Groq AI connection successful")
-        else:
-            logger.warning("✗ Groq AI connection failed - check API key")
-        
-        # Load cogs
-        cogs_dir = Path(__file__).parent / "commands"
-        if cogs_dir.exists():
-            for cog_file in cogs_dir.glob("*.py"):
-                if cog_file.name.startswith("_"):
-                    continue
-                
-                cog_name = cog_file.stem
-                try:
-                    await self.load_extension(f"commands.{cog_name}")
-                    logger.info(f"✓ Loaded cog: {cog_name}")
-                except Exception as e:
-                    logger.error(f"✗ Failed to load cog {cog_name}: {e}")
-        
-        # Load main ticket cog
         try:
-            await self.load_extension("main")
-            logger.info("✓ Loaded main ticket cog")
+            logger.info("🚀 Setting up Supreme AI Bot for Koyeb...")
+            
+            # Check Groq connection
+            self.groq_ready = await self.ai.check_health()
+            if self.groq_ready:
+                logger.info("✓ Groq AI connection successful")
+            else:
+                logger.warning("✗ Groq AI connection failed - check API key")
+            
+            # Sync commands with Discord
+            try:
+                synced = await self.tree.sync()
+                logger.info(f"✓ Synced {len(synced)} command(s)")
+            except Exception as e:
+                logger.error(f"✗ Failed to sync commands: {e}")
+        
         except Exception as e:
-            logger.error(f"✗ Failed to load main cog: {e}")
+            logger.error(f"✗ Error in setup_hook: {e}")
+            traceback.print_exc()
     
     async def on_ready(self):
         """Bot ready event"""
-        logger.info(f"✓ Bot logged in as {self.user}")
-        logger.info(f"✓ Bot is in {len(self.guilds)} guild(s)")
-        
-        # Log database stats
-        stats = self.db.get_stats()
-        logger.info(f"📊 Database: {stats['total_training_entries']} training entries, "
-                   f"{stats['total_conversations']} conversations, "
-                   f"{stats['open_tickets']} open tickets")
-        
-        # Set status
-        await self.change_presence(
-            activity=discord.Activity(
-                type=discord.ActivityType.watching,
-                name="support tickets | Powered by Groq AI"
+        try:
+            logger.info(f"✓ Bot logged in as {self.user}")
+            logger.info(f"✓ Bot is in {len(self.guilds)} guild(s)")
+            
+            # Log database stats
+            try:
+                stats = self.db.get_stats()
+                logger.info(f"📊 Database: {stats['total_training_entries']} training entries, "
+                           f"{stats['total_conversations']} conversations, "
+                           f"{stats['open_tickets']} open tickets")
+            except Exception as e:
+                logger.warning(f"Could not get database stats: {e}")
+            
+            # Set status
+            await self.change_presence(
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name="support tickets | Powered by Groq AI"
+                )
             )
-        )
+        except Exception as e:
+            logger.error(f"✗ Error in on_ready: {e}")
+            traceback.print_exc()
     
     async def on_error(self, event, *args, **kwargs):
         """Error handler"""
@@ -120,14 +126,21 @@ async def main():
         bot = SupremeAIBot()
         
         async with bot:
+            logger.info("🚀 Starting bot...")
             await bot.start(Config.DISCORD_TOKEN)
     
     except KeyboardInterrupt:
         logger.info("🛑 Bot shutting down...")
     except Exception as e:
         logger.error(f"💥 Fatal error: {e}")
+        traceback.print_exc()
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.error(f"💥 Asyncio error: {e}")
+        traceback.print_exc()
+        sys.exit(1)
