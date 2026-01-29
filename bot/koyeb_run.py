@@ -36,7 +36,7 @@ class SupremeAIBot(commands.Bot):
         intents.message_content = True
         intents.guilds = True
         intents.guild_messages = True
-        intents.direct_messages = True
+        intents.dm_messages = True
         intents.members = True
         
         super().__init__(command_prefix=Config.BOT_PREFIX, intents=intents)
