@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const db = require('../utils/database');
 const ai = require('../utils/ai');
 
@@ -35,11 +35,6 @@ const commands = [
             .addSubcommand(sub => 
                 sub.setName('add')
                     .setDescription('Add training data to teach the AI')
-                    .addStringOption(opt => opt.setName('question').setDescription('The question or trigger phrase').setRequired(true))
-                    .addStringOption(opt => opt.setName('answer').setDescription('The response the AI should give').setRequired(true))
-                    .addStringOption(opt => opt.setName('category').setDescription('Category (e.g., billing, technical, general)').setRequired(false))
-                    .addIntegerOption(opt => opt.setName('next_step').setDescription('ID of the next step in the flow').setRequired(false))
-                    .addStringOption(opt => opt.setName('data_point').setDescription('Name of the data to collect from user answer (e.g., "item", "quantity")').setRequired(false))
             )
             .addSubcommand(sub => 
                 sub.setName('list')
@@ -55,39 +50,39 @@ const commands = [
             const sub = interaction.options.getSubcommand();
             
             if (sub === 'add') {
-                const question = interaction.options.getString('question');
-                const answer = interaction.options.getString('answer');
-                const category = interaction.options.getString('category') || 'general';
-                const nextStep = interaction.options.getInteger('next_step');
-                const dataPoint = interaction.options.getString('data_point');
-                
-                try {
-                    const result = db.addTraining(question, answer, category, nextStep, dataPoint);
-                    
-                    if (!result || result.lastInsertRowid === undefined) {
-                        throw new Error('Database failed to return a valid ID. Check if the volume is writable.');
-                    }
+                const modal = new ModalBuilder()
+                    .setCustomId('train_ai_modal')
+                    .setTitle('Train Your AI');
 
-                    const embed = new EmbedBuilder()
-                        .setTitle('✅ Training Added')
-                        .setColor(0x00ff00)
-                        .addFields(
-                            { name: '🆔 ID', value: result.lastInsertRowid.toString(), inline: true },
-                            { name: '📁 Category', value: category, inline: true },
-                            { name: '🔗 Next Step ID', value: nextStep ? nextStep.toString() : 'None', inline: true },
-                            { name: '📊 Collecting', value: dataPoint ? `"${dataPoint}"` : 'Nothing', inline: true },
-                            { name: '❓ Question', value: question },
-                            { name: '💬 Answer', value: answer }
-                        )
-                        .setFooter({ text: 'Flow Master: Link steps together to create automated forms!' })
-                        .setTimestamp();
-                    await interaction.reply({ embeds: [embed] });
-                } catch (error) {
-                    console.error('❌ [TRAIN ERROR]', error);
-                    let errorMsg = error.message;
-                    if (errorMsg.includes('readonly')) errorMsg = 'Database is read-only. Ensure your Koyeb volume is mounted correctly with write permissions.';
-                    await interaction.reply({ content: `❌ **Training Failed:** ${errorMsg}`, ephemeral: true });
-                }
+                const questionInput = new TextInputBuilder()
+                    .setCustomId('train_question')
+                    .setLabel('Training Question/Trigger')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('Enter the question or trigger phrase...')
+                    .setRequired(true);
+
+                const answerInput = new TextInputBuilder()
+                    .setCustomId('train_answer')
+                    .setLabel('Training Message/Response')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder("Enter information or examples you want the AI to learn. For example: 'When users ask about pricing, explain that our basic plan is $9.99/month...'")
+                    .setMaxLength(2000)
+                    .setRequired(true);
+
+                const categoryInput = new TextInputBuilder()
+                    .setCustomId('train_category')
+                    .setLabel('Category (Optional)')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('e.g., billing, technical, general')
+                    .setRequired(false);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(questionInput),
+                    new ActionRowBuilder().addComponents(answerInput),
+                    new ActionRowBuilder().addComponents(categoryInput)
+                );
+
+                await interaction.showModal(modal);
                 
             } else if (sub === 'list') {
                 const category = interaction.options.getString('category');
@@ -96,7 +91,7 @@ const commands = [
                 
                 const chunk = data.slice(0, 10);
                 const description = chunk.map(item => 
-                    `**#${item.id}** [${item.category}] ${item.query.substring(0, 40)}${item.query.length > 40 ? '...' : ''}\n└ Next: ${item.next_step_id || 'End'} | Collecting: ${item.data_point_name || 'None'}`
+                    `**#${item.id}** [${item.category}] ${item.query.substring(0, 40)}${item.query.length > 40 ? '...' : ''}\n└ Response: ${item.response.substring(0, 60)}${item.response.length > 60 ? '...' : ''}`
                 ).join('\n\n');
                 
                 const embed = new EmbedBuilder()

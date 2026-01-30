@@ -143,11 +143,22 @@ module.exports = {
     
     searchSimilar: (query) => {
         try {
-            const q = query.toLowerCase();
+            const q = query.toLowerCase().trim();
+            
+            // 1. Exact match
             let res = db.prepare('SELECT * FROM training WHERE LOWER(query) = ? LIMIT 1').get(q);
             if (res) return res;
+
+            // 2. Keyword match (if query contains the trained phrase)
+            res = db.prepare("SELECT * FROM training WHERE ? LIKE '%' || LOWER(query) || '%' ORDER BY LENGTH(query) DESC LIMIT 1").get(q);
+            if (res) return res;
+
+            // 3. Partial match (if trained phrase contains the query)
             return db.prepare('SELECT * FROM training WHERE LOWER(query) LIKE ? ORDER BY usage_count DESC LIMIT 1').get(`%${q}%`);
-        } catch (e) { return null; }
+        } catch (e) { 
+            console.error('❌ [DATABASE] searchSimilar error:', e.message);
+            return null; 
+        }
     },
     
     incrementUsage: (id) => {

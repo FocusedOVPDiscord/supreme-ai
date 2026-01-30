@@ -43,6 +43,48 @@ client.once(Events.ClientReady, async () => {
     await registerCommands();
 });
 
+client.on(Events.InteractionCreate, async interaction => {
+    if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return;
+        try {
+            await command.execute(interaction);
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+        }
+    }
+
+    if (interaction.isModalSubmit()) {
+        if (interaction.customId === 'train_ai_modal') {
+            const question = interaction.fields.getTextInputValue('train_question');
+            const answer = interaction.fields.getTextInputValue('train_answer');
+            const category = interaction.fields.getTextInputValue('train_category') || 'general';
+
+            try {
+                const result = db.addTraining(question, answer, category);
+                
+                const embed = new EmbedBuilder()
+                    .setTitle('✅ Training Added')
+                    .setColor(0x00ff00)
+                    .addFields(
+                        { name: '🆔 ID', value: result.lastInsertRowid.toString(), inline: true },
+                        { name: '📁 Category', value: category, inline: true },
+                        { name: '❓ Question', value: question },
+                        { name: '💬 Answer', value: answer }
+                    )
+                    .setFooter({ text: 'AI will now prioritize this response!' })
+                    .setTimestamp();
+                
+                await interaction.reply({ embeds: [embed] });
+            } catch (error) {
+                console.error('❌ [TRAIN ERROR]', error);
+                await interaction.reply({ content: `❌ **Training Failed:** ${error.message}`, ephemeral: true });
+            }
+        }
+    }
+});
+
 function isTicketChannel(channel) {
     if (!channel || ![ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread].includes(channel.type)) return false;
     if (process.env.TICKET_CATEGORY_ID && channel.parent?.id !== process.env.TICKET_CATEGORY_ID) return false;
@@ -93,9 +135,24 @@ client.on(Events.MessageCreate, async message => {
             return;
         }
 
-        // If not in trade flow, then use AI
+        // If not in trade flow, then use AI with Training Priority
         await message.channel.sendTyping();
-        const response = await ai.generateResponse(message.content);
+
+        // 1. Check for trained response first (85% priority)
+        const trainedMatch = db.searchSimilar(message.content);
+        const useTrained = Math.random() < 0.85;
+
+        let response;
+        if (trainedMatch && useTrained) {
+            console.log(`🎯 [TRAINING] Using trained response for: "${message.content}"`);
+            response = trainedMatch.response;
+            db.incrementUsage(trainedMatch.id);
+        } else {
+            // 2. Fallback to AI if no match or 15% chance
+            console.log(`🤖 [AI] Generating AI response for: "${message.content}"`);
+            response = await ai.generateResponse(message.content);
+        }
+
         if (response) {
             const tokenCount = Math.floor(Math.random() * (10500 - 9000) + 9000);
             const finalResponse = `${response}\n-# ${tokenCount} tokens`;
