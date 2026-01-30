@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, Collection, REST, Routes, Events, ChannelType
 const db = require('./utils/database');
 const ai = require('./utils/ai');
 const tradeLogic = require('./utils/tradeLogic');
+const formatter = require('./utils/responseFormatter');
 const commandsList = require('./commands');
 
 const client = new Client({
@@ -145,7 +146,10 @@ client.on(Events.MessageCreate, async message => {
         let response;
         if (trainedMatch && useTrained) {
             console.log(`🎯 [TRAINING] Using trained response for: "${message.content}"`);
-            response = trainedMatch.response;
+            
+            // Apply dynamic formatting (replace {user}, {item}, etc.)
+            response = formatter.formatResponse(trainedMatch.response, message, collectedData);
+            
             db.incrementUsage(trainedMatch.id);
         } else {
             // 2. Fallback to AI if no match or 15% chance
