@@ -111,5 +111,44 @@ Important:
             console.error('❌ Failed to fetch models:', error.message);
             return [];
         }
+    },
+
+    /**
+     * Extract Q&A pair from a single training message using AI
+     */
+    extractTrainingData: async (trainingMessage) => {
+        if (!groq) return null;
+
+        const systemPrompt = `You are a training data extractor. Your job is to take a user's training instruction and convert it into a JSON object with a "question" and an "answer".
+        
+        Rules:
+        1. "question" should be the trigger phrase or user query.
+        2. "answer" should be the exact response the bot should give.
+        3. If the user mentions dynamic variables like "replace users/items", use placeholders like {user}, {user_item}, {user_qty}, {partner_item}, {partner_qty}, {partner}.
+        4. Return ONLY a valid JSON object.
+        
+        Example Input: "When users ask about pricing, explain that our basic plan is $9.99/month"
+        Example Output: {"question": "pricing", "answer": "Our basic plan is $9.99/month."}
+        
+        Example Input: "give the trade setup (Final) like # Trade Setup (Final) <@user> is trading with <@partner>... but replace users and items"
+        Example Output: {"question": "trade setup", "answer": "# Trade Setup (Final)\\n{user} is trading with {partner}\\n{user} gives: {user_item} x{user_qty}\\n{partner} gives: {partner_item} x{partner_qty}"}`;
+
+        try {
+            const chatCompletion = await groq.chat.completions.create({
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: trainingMessage }
+                ],
+                model: "llama-3.1-8b-instant", // Use fast model for extraction
+                temperature: 0.1,
+                response_format: { type: "json_object" }
+            });
+
+            const content = chatCompletion.choices[0]?.message?.content;
+            return JSON.parse(content);
+        } catch (error) {
+            console.error('❌ [AI EXTRACTION ERROR]', error.message);
+            return null;
+        }
     }
 };

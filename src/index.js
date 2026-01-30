@@ -58,29 +58,36 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'train_ai_modal') {
-            const question = interaction.fields.getTextInputValue('train_question');
-            const answer = interaction.fields.getTextInputValue('train_answer');
-            const category = interaction.fields.getTextInputValue('train_category') || 'general';
+            const trainingMessage = interaction.fields.getTextInputValue('train_message');
+            
+            await interaction.deferReply({ ephemeral: true });
 
             try {
-                const result = db.addTraining(question, answer, category);
+                // Use AI to extract Q&A from the single message
+                const extracted = await ai.extractTrainingData(trainingMessage);
+                
+                if (!extracted || !extracted.question || !extracted.answer) {
+                    return await interaction.editReply({ content: '❌ Failed to process training message. Please be more specific.' });
+                }
+
+                const result = db.addTraining(extracted.question, extracted.answer, 'general');
                 
                 const embed = new EmbedBuilder()
-                    .setTitle('✅ Training Added')
+                    .setTitle('✅ Training Saved')
+                    .setDescription('Your training input has been saved to improve the AI\'s responses in this server.')
                     .setColor(0x00ff00)
                     .addFields(
                         { name: '🆔 ID', value: result.lastInsertRowid.toString(), inline: true },
-                        { name: '📁 Category', value: category, inline: true },
-                        { name: '❓ Question', value: question },
-                        { name: '💬 Answer', value: answer }
+                        { name: '❓ Detected Question', value: extracted.question },
+                        { name: '💬 Detected Answer', value: extracted.answer }
                     )
                     .setFooter({ text: 'AI will now prioritize this response!' })
                     .setTimestamp();
                 
-                await interaction.reply({ embeds: [embed] });
+                await interaction.editReply({ embeds: [embed] });
             } catch (error) {
                 console.error('❌ [TRAIN ERROR]', error);
-                await interaction.reply({ content: `❌ **Training Failed:** ${error.message}`, ephemeral: true });
+                await interaction.editReply({ content: `❌ **Training Failed:** ${error.message}` });
             }
         }
     }

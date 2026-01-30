@@ -54,33 +54,15 @@ const commands = [
                     .setCustomId('train_ai_modal')
                     .setTitle('Train Your AI');
 
-                const questionInput = new TextInputBuilder()
-                    .setCustomId('train_question')
-                    .setLabel('Training Question/Trigger')
-                    .setStyle(TextInputStyle.Short)
-                    .setPlaceholder('Enter the question or trigger phrase...')
-                    .setRequired(true);
-
-                const answerInput = new TextInputBuilder()
-                    .setCustomId('train_answer')
-                    .setLabel('Training Message/Response')
+                const trainingInput = new TextInputBuilder()
+                    .setCustomId('train_message')
+                    .setLabel('Training Message')
                     .setStyle(TextInputStyle.Paragraph)
                     .setPlaceholder("Enter information or examples you want the AI to learn. For example: 'When users ask about pricing, explain that our basic plan is $9.99/month...'")
                     .setMaxLength(2000)
                     .setRequired(true);
 
-                const categoryInput = new TextInputBuilder()
-                    .setCustomId('train_category')
-                    .setLabel('Category (Optional)')
-                    .setStyle(TextInputStyle.Short)
-                    .setPlaceholder('e.g., billing, technical, general')
-                    .setRequired(false);
-
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(questionInput),
-                    new ActionRowBuilder().addComponents(answerInput),
-                    new ActionRowBuilder().addComponents(categoryInput)
-                );
+                modal.addComponents(new ActionRowBuilder().addComponents(trainingInput));
 
                 await interaction.showModal(modal);
                 
