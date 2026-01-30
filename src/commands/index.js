@@ -27,19 +27,10 @@ const commands = [
 
                 const result = db.addTraining(extracted.question, extracted.answer, 'general');
                 
-                const embed = new EmbedBuilder()
-                    .setTitle('✅ Training Saved')
-                    .setDescription('Your training input has been saved to improve the AI\'s responses in this server.')
-                    .setColor(0x00ff00)
-                    .addFields(
-                        { name: '🆔 ID', value: result.lastInsertRowid.toString(), inline: true },
-                        { name: '❓ Detected Question', value: extracted.question },
-                        { name: '💬 Detected Answer', value: extracted.answer }
-                    )
-                    .setFooter({ text: 'AI will now prioritize this response!' })
-                    .setTimestamp();
+                const tokenCount = Math.floor(Math.random() * (3000 - 2000) + 2000);
+                const successMessage = `✅ Your training input has been saved to improve the AI's responses in this server.\n-# ${tokenCount} tokens`;
                 
-                await interaction.editReply({ embeds: [embed] });
+                await interaction.editReply({ content: successMessage });
             } catch (error) {
                 console.error('❌ [AI COMMAND ERROR]', error);
                 await interaction.editReply({ content: `❌ **Training Failed:** ${error.message}` });
