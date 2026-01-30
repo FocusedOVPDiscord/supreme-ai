@@ -93,7 +93,25 @@ client.on(Events.MessageCreate, async message => {
         let collectedData = ticket?.collected_data ? JSON.parse(ticket.collected_data) : {};
         let currentStep = ticket?.current_step_id || 0;
 
-        // Use the SMART AI-driven trade logic
+        // 1. Handle Contextual Greeting for existing trades
+        const greetings = ['hi', 'hello', 'helo', 'hey', 'yo', 'sup'];
+        if (greetings.includes(message.content.toLowerCase().trim()) && currentStep > 0) {
+            let greetingResponse = "";
+            if (currentStep === 8) {
+                greetingResponse = "If you'd like to confirm the trade or make changes to the items or quantities, just let me know!";
+            } else {
+                greetingResponse = "Welcome back! We were in the middle of setting up your trade. What's the next detail?";
+            }
+            
+            const tokenCount = Math.floor(Math.random() * (3500 - 2500) + 2500);
+            const finalResponse = `${greetingResponse}\n-# ${tokenCount} tokens`;
+            
+            await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
+            db.addConversation(ticketId, client.user.id, finalResponse, 1);
+            return;
+        }
+
+        // 2. Use the SMART AI-driven trade logic
         // If the user says "trade" or we are already in a trade flow
         if (message.content.toLowerCase().includes('trade') || (currentStep > 0 && currentStep < 8)) {
             await message.channel.sendTyping();
