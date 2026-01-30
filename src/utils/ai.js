@@ -123,28 +123,27 @@ Important:
     extractTrainingData: async (trainingMessage) => {
         if (!groq) return null;
 
-        const systemPrompt = `You are a training data extractor for a Discord Bot. Your job is to convert a user's training instruction into a functional Q&A pair.
-        
+        const systemPrompt = `You are a highly intelligent training data extractor for a Discord Support Bot. 
+        Your goal is to understand the user's INTENT and convert it into a functional trigger (question) and response (answer).
+
         Rules:
-        1. "question": This is the trigger. If the user describes a scenario (e.g., "if item mentioned"), extract the core keywords that trigger this scenario.
-        2. "answer": This is the bot's response. It MUST be the actual message the bot sends, NOT a description of the rule.
-        3. Use natural language placeholders in the "answer":
-           - USER: Mention the ticket owner.
-           - PARTNER: Mention the trade partner.
-           - ITEMS: The items being traded.
-           - QUANTITY: The quantity of items.
-           - SERVER: The server name.
-        4. If the user provides a conditional (e.g., "if X then say Y"), the "question" should be the condition/trigger and "answer" should be Y.
-        5. Return ONLY a valid JSON object.
-        
-        Example Input: "When users ask about pricing, explain that our basic plan is $9.99/month"
-        Example Output: {"question": "pricing", "answer": "Our basic plan is $9.99/month."}
-        
-        Example Input: "if item mentioned make sure to say Okay! and whats your partner giving"
+        1. "question": Extract the core trigger or scenario. If the user says "When someone says X", the question is "X". If they describe a situation like "if they mention items", the question should be a common way users mention items (e.g., "i give").
+        2. "answer": This MUST be the exact, professional message the bot will send. 
+        3. AUTOMATICALLY map natural terms to these placeholders:
+           - USER -> Mentions the ticket owner.
+           - PARTNER -> Mentions the trade partner.
+           - ITEMS -> The items being traded.
+           - QUANTITY -> The quantity.
+        4. BE SMART: If the user says "replace users and items", automatically use USER and ITEMS in the answer.
+        5. DO NOT repeat the user's instructions in the answer. Only provide the final bot response.
+
+        Example Input: "if i mention an item say Okay! and ask what the partner is giving"
         Example Output: {"question": "i give", "answer": "Okay! And what is your partner giving?"}
 
-        Example Input: "give the trade setup (Final) like # Trade Setup (Final) USER is trading with PARTNER... but replace users and items"
-        Example Output: {"question": "trade setup", "answer": "# Trade Setup (Final)\\nUSER is trading with PARTNER\\nUSER gives: ITEMS xQUANTITY\\nPARTNER gives: ITEMS xQUANTITY"}`;
+        Example Input: "When users ask about the trade setup, show: # Trade Setup (Final) USER is trading with PARTNER... replace users and items"
+        Example Output: {"question": "trade setup", "answer": "# Trade Setup (Final)\\n\\nUSER is trading with PARTNER\\n\\nUSER gives:\\n- ITEMS xQUANTITY\\n\\nPARTNER gives:\\n- ITEMS xQUANTITY\\n\\nBoth of you, please type confirm if correct."}
+
+        Return ONLY a valid JSON object.`;
 
         try {
             const chatCompletion = await groq.chat.completions.create({
