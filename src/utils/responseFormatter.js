@@ -43,13 +43,32 @@ module.exports = {
         // Combine all variables
         const allVars = { ...authorVars, ...ticketVars, ...tradeVars, ...serverVars };
 
+        // 5. Natural Language Replacements (USER, ITEMS, PARTNER, etc.)
+        const naturalVars = {
+            'USER': ticketVars['{ticket.user}'],
+            'PARTNER': tradeVars['{partner}'],
+            'ITEMS': tradeVars['{user_item}'],
+            'USER_ITEMS': tradeVars['{user_item}'],
+            'PARTNER_ITEMS': tradeVars['{partner_item}'],
+            'QUANTITY': tradeVars['{user_qty}'],
+            'USER_QTY': tradeVars['{user_qty}'],
+            'PARTNER_QTY': tradeVars['{partner_qty}'],
+            'SERVER': serverVars['{server.name}']
+        };
+
         // Replace variables
         Object.keys(allVars).forEach(key => {
             const placeholder = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
             formatted = formatted.replace(placeholder, allVars[key]);
         });
 
-        // 5. Legacy/Special Replacements
+        // Replace natural language variables (only if they are whole words)
+        Object.keys(naturalVars).forEach(key => {
+            const placeholder = new RegExp(`\\b${key}\\b`, 'g'); // Case sensitive for USER/ITEMS
+            formatted = formatted.replace(placeholder, naturalVars[key]);
+        });
+
+        // 6. Legacy/Special Replacements
         formatted = formatted.replace(/<@User>/gi, `<@${author.id}>`);
         formatted = formatted.replace(/{user}/gi, `<@${author.id}>`);
         formatted = formatted.replace(/{input}/gi, message.content);
