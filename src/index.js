@@ -127,7 +127,10 @@ client.on(Events.MessageCreate, async message => {
         } else {
             // 2. Fallback to AI if no match or 15% chance
             console.log(`🤖 [AI] Generating AI response for: "${message.content}"`);
-            response = await ai.generateResponse(message.content);
+            
+            // Include trade context in the AI prompt for better recognition
+            const tradeContext = collectedData ? `\n[Current Trade Data]: ${JSON.stringify(collectedData)}` : "";
+            response = await ai.generateResponse(message.content, tradeContext);
         }
 
         if (response) {
