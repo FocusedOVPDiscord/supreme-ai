@@ -104,6 +104,7 @@ client.on(Events.MessageCreate, async message => {
             // Replace placeholder if needed
             let finalResponse = result.bot_response.replace(/<@User>/g, `<@${message.author.id}>`);
 
+            // Check if it's a trade flow response (no token count for trade flow to match AI Ticket Bot)
             await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
             db.addConversation(ticketId, client.user.id, finalResponse, 1);
             return;
