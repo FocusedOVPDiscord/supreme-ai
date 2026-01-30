@@ -128,9 +128,17 @@ Important:
         Rules:
         1. "question": This is the trigger. If the user describes a scenario (e.g., "if item mentioned"), extract the core keywords that trigger this scenario.
         2. "answer": This is the bot's response. It MUST be the actual message the bot sends, NOT a description of the rule.
-        3. Use dynamic placeholders: {user}, {user_item}, {user_qty}, {partner_item}, {partner_qty}, {partner}.
-        4. If the user provides a conditional (e.g., "if X then say Y"), the "question" should be the condition/trigger and "answer" should be Y.
-        5. Return ONLY a valid JSON object.
+        3. Use professional placeholders:
+           - {author}: Mention the user who sent the message.
+           - {author.name}: The username of the author.
+           - {ticket.user}: Mention the ticket owner.
+           - {user_item}, {partner_item}: Trade items.
+           - {user_qty}, {partner_qty}: Trade quantities.
+           - {partner}: The trade partner.
+           - {server.name}: The server name.
+        4. You can use modifiers like {author.name?upper} for uppercase.
+        5. If the user provides a conditional (e.g., "if X then say Y"), the "question" should be the condition/trigger and "answer" should be Y.
+        6. Return ONLY a valid JSON object.
         
         Example Input: "When users ask about pricing, explain that our basic plan is $9.99/month"
         Example Output: {"question": "pricing", "answer": "Our basic plan is $9.99/month."}
@@ -139,7 +147,7 @@ Important:
         Example Output: {"question": "i give", "answer": "Okay! And what is your partner giving?"}
 
         Example Input: "give the trade setup (Final) like # Trade Setup (Final) <@user> is trading with <@partner>... but replace users and items"
-        Example Output: {"question": "trade setup", "answer": "# Trade Setup (Final)\\n{user} is trading with {partner}\\n{user} gives: {user_item} x{user_qty}\\n{partner} gives: {partner_item} x{partner_qty}"}`;
+        Example Output: {"question": "trade setup", "answer": "# Trade Setup (Final)\\n{ticket.user} is trading with {partner}\\n{ticket.user} gives: {user_item} x{user_qty}\\n{partner} gives: {partner_item} x{partner_qty}"}`;
 
         try {
             const chatCompletion = await groq.chat.completions.create({

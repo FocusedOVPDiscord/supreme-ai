@@ -7,29 +7,63 @@ module.exports = {
 
         let formatted = template;
 
-        // 1. Handle User Mentions
-        // Replace <@User> or {user} with the message author
-        const userMention = `<@${message.author.id}>`;
-        formatted = formatted.replace(/<@User>|{user}/gi, userMention);
+        // 1. Author Variables (The person who triggered the message)
+        const author = message.author;
+        const authorVars = {
+            '{author}': `<@${author.id}>`,
+            '{author.name}': author.username,
+            '{author.id}': author.id,
+            '{author.avatar}': author.displayAvatarURL()
+        };
 
-        // 2. Handle Ticket Data (from trade flow)
-        // Variables like {user_item}, {partner_item}, {user_qty}, {partner_qty}, {partner_id}
-        if (ticketData) {
-            Object.keys(ticketData).forEach(key => {
-                const value = ticketData[key];
-                const placeholder = new RegExp(`{${key}}`, 'gi');
-                formatted = formatted.replace(placeholder, value || 'N/A');
-            });
+        // 2. Ticket Variables (The owner of the ticket)
+        const ticketVars = {
+            '{ticket.user}': ticketData.user_id ? `<@${ticketData.user_id}>` : `<@${author.id}>`,
+            '{ticket.id}': message.channel.name,
+            '{ticket.channel}': `<#${message.channel.id}>`
+        };
 
-            // Common aliases
-            formatted = formatted.replace(/{item}/gi, ticketData.user_item || 'item');
-            formatted = formatted.replace(/{partner}/gi, ticketData.partner_id || 'partner');
-            formatted = formatted.replace(/{qty}/gi, ticketData.user_qty || '1');
-        }
+        // 3. Trade Specific Variables
+        const tradeVars = {
+            '{user_item}': ticketData.user_item || 'item',
+            '{partner_item}': ticketData.partner_item || 'item',
+            '{user_qty}': ticketData.user_qty || '1',
+            '{partner_qty}': ticketData.partner_qty || '1',
+            '{partner}': ticketData.partner_id || 'partner',
+            '{item}': ticketData.user_item || 'item',
+            '{qty}': ticketData.user_qty || '1'
+        };
 
-        // 3. Simple extraction from current message if not in ticketData
-        // If the template asks for {input}, give the whole message
+        // 4. Server Variables
+        const serverVars = {
+            '{server.name}': message.guild?.name || 'Server',
+            '{server.id}': message.guild?.id || '0'
+        };
+
+        // Combine all variables
+        const allVars = { ...authorVars, ...ticketVars, ...tradeVars, ...serverVars };
+
+        // Replace variables
+        Object.keys(allVars).forEach(key => {
+            const placeholder = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            formatted = formatted.replace(placeholder, allVars[key]);
+        });
+
+        // 5. Legacy/Special Replacements
+        formatted = formatted.replace(/<@User>/gi, `<@${author.id}>`);
+        formatted = formatted.replace(/{user}/gi, `<@${author.id}>`);
         formatted = formatted.replace(/{input}/gi, message.content);
+
+        // 6. Apply Modifiers (Upper/Lower case)
+        // Example: {author.name?upper}
+        formatted = formatted.replace(/{([^{}]+)\?upper}/gi, (match, p1) => {
+            const val = allVars[`{${p1}}`];
+            return val ? val.toString().toUpperCase() : match;
+        });
+        formatted = formatted.replace(/{([^{}]+)\?lower}/gi, (match, p1) => {
+            const val = allVars[`{${p1}}`];
+            return val ? val.toString().toLowerCase() : match;
+        });
 
         return formatted;
     }
