@@ -123,17 +123,21 @@ Important:
     extractTrainingData: async (trainingMessage) => {
         if (!groq) return null;
 
-        const systemPrompt = `You are a training data extractor. Your job is to take a user's training instruction and convert it into a JSON object with a "question" and an "answer".
+        const systemPrompt = `You are a training data extractor for a Discord Bot. Your job is to convert a user's training instruction into a functional Q&A pair.
         
         Rules:
-        1. "question" should be the trigger phrase or user query.
-        2. "answer" should be the exact response the bot should give.
-        3. If the user mentions dynamic variables like "replace users/items", use placeholders like {user}, {user_item}, {user_qty}, {partner_item}, {partner_qty}, {partner}.
-        4. Return ONLY a valid JSON object.
+        1. "question": This is the trigger. If the user describes a scenario (e.g., "if item mentioned"), extract the core keywords that trigger this scenario.
+        2. "answer": This is the bot's response. It MUST be the actual message the bot sends, NOT a description of the rule.
+        3. Use dynamic placeholders: {user}, {user_item}, {user_qty}, {partner_item}, {partner_qty}, {partner}.
+        4. If the user provides a conditional (e.g., "if X then say Y"), the "question" should be the condition/trigger and "answer" should be Y.
+        5. Return ONLY a valid JSON object.
         
         Example Input: "When users ask about pricing, explain that our basic plan is $9.99/month"
         Example Output: {"question": "pricing", "answer": "Our basic plan is $9.99/month."}
         
+        Example Input: "if item mentioned make sure to say Okay! and whats your partner giving"
+        Example Output: {"question": "i give", "answer": "Okay! And what is your partner giving?"}
+
         Example Input: "give the trade setup (Final) like # Trade Setup (Final) <@user> is trading with <@partner>... but replace users and items"
         Example Output: {"question": "trade setup", "answer": "# Trade Setup (Final)\\n{user} is trading with {partner}\\n{user} gives: {user_item} x{user_qty}\\n{partner} gives: {partner_item} x{partner_qty}"}`;
 
