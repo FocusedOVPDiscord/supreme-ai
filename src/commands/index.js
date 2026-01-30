@@ -5,6 +5,49 @@ const ai = require('../utils/ai');
 const commands = [
     {
         data: new SlashCommandBuilder()
+            .setName('ai')
+            .setDescription('Train the AI or communicate with it')
+            .addStringOption(option => 
+                option.setName('message')
+                    .setDescription('Message to train the AI')
+                    .setRequired(true)
+            ),
+        async execute(interaction) {
+            const trainingMessage = interaction.options.getString('message');
+            
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                // Use AI to extract Q&A from the single message
+                const extracted = await ai.extractTrainingData(trainingMessage);
+                
+                if (!extracted || !extracted.question || !extracted.answer) {
+                    return await interaction.editReply({ content: '❌ Failed to process training message. Please be more specific.' });
+                }
+
+                const result = db.addTraining(extracted.question, extracted.answer, 'general');
+                
+                const embed = new EmbedBuilder()
+                    .setTitle('✅ Training Saved')
+                    .setDescription('Your training input has been saved to improve the AI\'s responses in this server.')
+                    .setColor(0x00ff00)
+                    .addFields(
+                        { name: '🆔 ID', value: result.lastInsertRowid.toString(), inline: true },
+                        { name: '❓ Detected Question', value: extracted.question },
+                        { name: '💬 Detected Answer', value: extracted.answer }
+                    )
+                    .setFooter({ text: 'AI will now prioritize this response!' })
+                    .setTimestamp();
+                
+                await interaction.editReply({ embeds: [embed] });
+            } catch (error) {
+                console.error('❌ [AI COMMAND ERROR]', error);
+                await interaction.editReply({ content: `❌ **Training Failed:** ${error.message}` });
+            }
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
             .setName('status')
             .setDescription('Check bot and AI status'),
         async execute(interaction) {
@@ -33,10 +76,6 @@ const commands = [
             .setDescription('Manage AI training data')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
             .addSubcommand(sub => 
-                sub.setName('add')
-                    .setDescription('Add training data to teach the AI')
-            )
-            .addSubcommand(sub => 
                 sub.setName('list')
                     .setDescription('List all training data')
                     .addStringOption(opt => opt.setName('category').setDescription('Filter by category').setRequired(false))
@@ -49,24 +88,7 @@ const commands = [
         async execute(interaction) {
             const sub = interaction.options.getSubcommand();
             
-            if (sub === 'add') {
-                const modal = new ModalBuilder()
-                    .setCustomId('train_ai_modal')
-                    .setTitle('Train Your AI');
-
-                const trainingInput = new TextInputBuilder()
-                    .setCustomId('train_message')
-                    .setLabel('Training Message')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder("Enter information or examples you want the AI to learn. For example: 'When users ask about pricing, explain that our basic plan is $9.99/month...'")
-                    .setMaxLength(2000)
-                    .setRequired(true);
-
-                modal.addComponents(new ActionRowBuilder().addComponents(trainingInput));
-
-                await interaction.showModal(modal);
-                
-            } else if (sub === 'list') {
+            if (sub === 'list') {
                 const category = interaction.options.getString('category');
                 const data = category ? db.getTrainingByCategory(category) : db.getAllTraining();
                 if (data.length === 0) return interaction.reply({ content: '📚 No training data found.', ephemeral: true });

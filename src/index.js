@@ -56,41 +56,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
     }
 
-    if (interaction.isModalSubmit()) {
-        if (interaction.customId === 'train_ai_modal') {
-            const trainingMessage = interaction.fields.getTextInputValue('train_message');
-            
-            await interaction.deferReply({ ephemeral: true });
 
-            try {
-                // Use AI to extract Q&A from the single message
-                const extracted = await ai.extractTrainingData(trainingMessage);
-                
-                if (!extracted || !extracted.question || !extracted.answer) {
-                    return await interaction.editReply({ content: '❌ Failed to process training message. Please be more specific.' });
-                }
-
-                const result = db.addTraining(extracted.question, extracted.answer, 'general');
-                
-                const embed = new EmbedBuilder()
-                    .setTitle('✅ Training Saved')
-                    .setDescription('Your training input has been saved to improve the AI\'s responses in this server.')
-                    .setColor(0x00ff00)
-                    .addFields(
-                        { name: '🆔 ID', value: result.lastInsertRowid.toString(), inline: true },
-                        { name: '❓ Detected Question', value: extracted.question },
-                        { name: '💬 Detected Answer', value: extracted.answer }
-                    )
-                    .setFooter({ text: 'AI will now prioritize this response!' })
-                    .setTimestamp();
-                
-                await interaction.editReply({ embeds: [embed] });
-            } catch (error) {
-                console.error('❌ [TRAIN ERROR]', error);
-                await interaction.editReply({ content: `❌ **Training Failed:** ${error.message}` });
-            }
-        }
-    }
 });
 
 function isTicketChannel(channel) {
