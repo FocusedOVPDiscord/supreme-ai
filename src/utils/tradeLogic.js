@@ -18,7 +18,7 @@ module.exports = {
         }
 
         // Step 2: Intent to Trade
-        if (currentStep === 1 && (msg.includes("trade") || msg.includes("i want to trade"))) {
+        if ((currentStep === 0 || currentStep === 1) && (msg === "trade" || msg.includes("i want to trade") || msg.includes("i'm looking to trade"))) {
             return {
                 bot_response: `What do you give and what does your trade partner give?\n${token()}`,
                 next_step: 2,

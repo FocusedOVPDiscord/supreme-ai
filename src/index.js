@@ -109,6 +109,14 @@ client.on(Events.MessageCreate, async message => {
             return;
         }
 
+        // If we are in the middle of a trade (step > 0), DO NOT let the AI answer.
+        // This forces the user to follow the trade flow steps.
+        if (currentStep > 0 && currentStep < 7) {
+            // Optional: You could send a small hint here if the user says something unrelated
+            // but for now, we just ignore to prevent AI interference.
+            return;
+        }
+
         // If not in trade flow, then use AI with Training Priority
         await message.channel.sendTyping();
 
