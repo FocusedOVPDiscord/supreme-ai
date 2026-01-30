@@ -162,5 +162,58 @@ Important:
             console.error('❌ [AI EXTRACTION ERROR]', error.message);
             return null;
         }
+    },
+
+    /**
+     * Smart AI-driven trade flow processor
+     */
+    processTradeMessage: async (message, currentData = {}) => {
+        if (!groq) return null;
+
+        const systemPrompt = `You are the brain of a Discord Trade Support Bot. Your job is to analyze the user's message and update the trade data.
+        
+        Current Trade Data: ${JSON.stringify(currentData)}
+        
+        Fields to fill:
+        - user_item: What the user is giving.
+        - user_qty: Quantity the user is giving.
+        - partner_item: What the partner is giving.
+        - partner_qty: Quantity the partner is giving.
+        - partner_id: The partner's mention or ID.
+        
+        Rules:
+        1. Extract any new information from the user's message.
+        2. If the user makes a typo (e.g., "drag" instead of "dragon"), correct it if obvious.
+        3. Determine the NEXT question to ask to complete the trade setup.
+        4. If ALL fields are filled, the next_step should be "summary".
+        5. Return a JSON object with:
+           - "updated_data": The full updated trade data object.
+           - "bot_response": The natural response/question to the user.
+           - "is_complete": Boolean, true if all data is collected.
+        
+        Example Response:
+        {
+            "updated_data": {"user_item": "Dragon", "user_qty": "3", "partner_item": "Gorgonzilla"},
+            "bot_response": "Got it. What quantity of Gorgonzilla does your partner give?",
+            "is_complete": false
+        }`;
+
+        try {
+            const chatCompletion = await groq.chat.completions.create({
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: message }
+                ],
+                model: "llama-3.1-70b-versatile",
+                temperature: 0.1,
+                response_format: { type: "json_object" }
+            });
+
+            const content = chatCompletion.choices[0]?.message?.content;
+            return JSON.parse(content);
+        } catch (error) {
+            console.error('❌ [AI TRADE PROCESS ERROR]', error.message);
+            return null;
+        }
     }
 };

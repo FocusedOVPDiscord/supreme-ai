@@ -93,29 +93,28 @@ client.on(Events.MessageCreate, async message => {
         let collectedData = ticket?.collected_data ? JSON.parse(ticket.collected_data) : {};
         let currentStep = ticket?.current_step_id || 0;
 
-        // Use the STRICT trade logic (No AI)
-        const result = tradeLogic.handleTradeFlow(message.content, collectedData, currentStep);
-        
-        if (result) {
-            // Update state with next step and merged data
-            const newData = { ...collectedData, ...result.extracted_data };
-            db.updateTicketState(ticketId, result.next_step, newData);
+        // Use the SMART AI-driven trade logic
+        // If the user says "trade" or we are already in a trade flow
+        if (message.content.toLowerCase().includes('trade') || (currentStep > 0 && currentStep < 8)) {
+            await message.channel.sendTyping();
+            
+            const aiResult = await ai.processTradeMessage(message.content, collectedData);
+            
+            if (aiResult) {
+                const nextStep = aiResult.is_complete ? 8 : (currentStep === 0 ? 1 : currentStep);
+                db.updateTicketState(ticketId, nextStep, aiResult.updated_data);
 
-            // Replace placeholder if needed
-            let finalResponse = result.bot_response.replace(/<@User>/g, `<@${message.author.id}>`);
+                let finalResponse = aiResult.bot_response;
+                
+                // If complete, format the final summary professionally
+                if (aiResult.is_complete) {
+                    finalResponse = `Trade Setup (Final)\n<@${message.author.id}> is trading with ${aiResult.updated_data.partner_id}\n<@${message.author.id}> gives:\n\n${aiResult.updated_data.user_item} x${aiResult.updated_data.user_qty}\n${aiResult.updated_data.partner_id} gives:\n\n${aiResult.updated_data.partner_item} x${aiResult.updated_data.partner_qty}\n\nBoth of you, please type confirm in this ticket if everything is correct.`;
+                }
 
-            // Check if it's a trade flow response (no token count for trade flow to match AI Ticket Bot)
-            await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
-            db.addConversation(ticketId, client.user.id, finalResponse, 1);
-            return;
-        }
-
-        // If we are in the middle of a trade (step > 0), DO NOT let the AI answer.
-        // This forces the user to follow the trade flow steps.
-        if (currentStep > 0 && currentStep < 7) {
-            // Optional: You could send a small hint here if the user says something unrelated
-            // but for now, we just ignore to prevent AI interference.
-            return;
+                await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
+                db.addConversation(ticketId, client.user.id, finalResponse, 1);
+                return;
+            }
         }
 
         // If not in trade flow, then use AI with Training Priority
