@@ -1,120 +1,37 @@
-const { spawn } = require('child_process');
-const path = require('path');
+const Groq = require('groq-sdk');
 
-/**
- * G4F (GPT4Free) AI Module - Completely Free, No API Keys Required
- * 
- * This module uses the g4f Python library to access free AI models
- * without any rate limits or paid credits.
- */
+// Initialize Groq client with API key from environment
+let groq = null;
 
-// Check if g4f is installed on first load
-let g4fInstalled = null;
-
-async function checkG4FInstallation() {
-    if (g4fInstalled !== null) return g4fInstalled;
-    
-    return new Promise((resolve) => {
-        const process = spawn('python3', ['-c', 'import g4f; print("OK")']);
-        let output = '';
-        
-        process.stdout.on('data', (data) => {
-            output += data.toString();
-        });
-        
-        process.on('close', (code) => {
-            g4fInstalled = (code === 0 && output.includes('OK'));
-            if (!g4fInstalled) {
-                console.warn('⚠️  g4f not installed. Install with: pip3 install -U g4f[all]');
-            }
-            resolve(g4fInstalled);
-        });
+if (process.env.GROQ_API_KEY) {
+    groq = new Groq({
+        apiKey: process.env.GROQ_API_KEY
     });
+} else {
+    console.warn('⚠️  GROQ_API_KEY not set - AI features will be disabled');
 }
 
-/**
- * Call g4f Python library to generate AI response
- * @param {string} model - Model name (e.g., 'gpt-4', 'gpt-5', 'meta-ai')
- * @param {string} systemPrompt - System prompt
- * @param {string} userPrompt - User prompt
- * @returns {Promise<string|null>} - AI response or null on error
- */
-async function callG4F(model, systemPrompt, userPrompt) {
-    const isInstalled = await checkG4FInstallation();
-    if (!isInstalled) {
-        console.error('❌ g4f is not installed');
-        return null;
-    }
-
-    return new Promise((resolve) => {
-        const pythonScript = `
-import sys
-import json
-from g4f.client import Client
-
-try:
-    client = Client()
-    response = client.chat.completions.create(
-        model="${model}",
-        messages=[
-            {"role": "system", "content": ${JSON.stringify(systemPrompt)}},
-            {"role": "user", "content": ${JSON.stringify(userPrompt)}}
-        ],
-        web_search=False
-    )
-    print(response.choices[0].message.content)
-except Exception as e:
-    print(f"ERROR: {str(e)}", file=sys.stderr)
-    sys.exit(1)
-`;
-
-        const process = spawn('python3', ['-c', pythonScript]);
-        let output = '';
-        let errorOutput = '';
-
-        process.stdout.on('data', (data) => {
-            output += data.toString();
-        });
-
-        process.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-        });
-
-        process.on('close', (code) => {
-            if (code === 0 && output.trim()) {
-                resolve(output.trim());
-            } else {
-                console.error(`❌ g4f error (${model}):`, errorOutput);
-                resolve(null);
-            }
-        });
-
-        // Timeout after 30 seconds
-        setTimeout(() => {
-            process.kill();
-            resolve(null);
-        }, 30000);
-    });
-}
-
-// List of models to try in order of preference
-// These are all FREE and require NO authentication
+// List of supported models in order of preference
 const MODELS = [
-    "gpt-4",           // Via AnyProvider (aggregates multiple sources)
-    "gpt-5",           // Via AnyProvider (latest model)
-    "meta-ai",         // Via MetaAI (very reliable)
-    "qwen-max",        // Via Qwen (powerful Chinese model)
-    "gpt-4o-mini",     // Fallback option
+    "llama-3.3-70b-versatile", // Best and smartest
+    "llama-3.1-70b-versatile", // Great fallback
+    "llama-3.1-8b-instant",     // Fastest fallback
+    "mixtral-8x7b-32768"       // Alternative fallback
 ];
 
 module.exports = {
     /**
-     * Generate AI response using G4F with automatic model fallback
+     * Generate AI response using Groq API with automatic model fallback
      * @param {string} query - User's question
      * @param {string} context - Conversation history or additional context
      * @returns {Promise<string|null>} - AI response or null on error
      */
     generateResponse: async (query, context = "") => {
+        if (!groq) {
+            console.error('❌ Groq client not initialized - check GROQ_API_KEY');
+            return null;
+        }
+
         const systemPrompt = `You are Supreme AI, a helpful and professional Discord support assistant.
 
 Your role:
@@ -140,42 +57,72 @@ Important:
         // Try models one by one until one works
         for (const modelName of MODELS) {
             try {
-                console.log(`🤖 [G4F] Attempting response with model: ${modelName}`);
+                console.log(`🤖 [AI] Attempting response with model: ${modelName}`);
                 
-                const response = await callG4F(modelName, systemPrompt, userPrompt);
+                const chatCompletion = await groq.chat.completions.create({
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt }
+                    ],
+                    model: modelName,
+                    temperature: 0.7,
+                    max_tokens: 500,
+                    top_p: 0.9,
+                    stream: false
+                });
+
+                const response = chatCompletion.choices[0]?.message?.content;
                 
                 if (response) {
-                    console.log(`✅ [G4F] Generated response using ${modelName} (${response.length} chars)`);
+                    console.log(`✅ [AI] Generated response using ${modelName} (${response.length} chars)`);
                     return response.trim();
                 }
             } catch (error) {
-                console.error(`⚠️ [G4F] Model ${modelName} failed:`, error.message);
+                console.error(`⚠️ [AI] Model ${modelName} failed:`, error.message);
+                // Continue to next model in the list
                 continue;
             }
         }
 
-        console.error('❌ [G4F] All models failed');
+        console.error('❌ [AI] All Groq models failed or are decommissioned.');
         return null;
     },
 
     /**
-     * Check if G4F is accessible and healthy
+     * Check if Groq API is accessible and healthy
      */
     checkHealth: async () => {
-        return await checkG4FInstallation();
+        if (!groq) return false;
+        try {
+            const models = await groq.models.list();
+            console.log(`✅ Groq API healthy, ${models.data?.length || 0} models available`);
+            return true;
+        } catch (error) {
+            console.error('❌ Groq API health check failed:', error.message);
+            return false;
+        }
     },
 
     /**
-     * Get available models
+     * Get available Groq models
      */
     getModels: async () => {
-        return MODELS;
+        if (!groq) return [];
+        try {
+            const response = await groq.models.list();
+            return response.data || [];
+        } catch (error) {
+            console.error('❌ Failed to fetch models:', error.message);
+            return [];
+        }
     },
 
     /**
      * Extract Q&A pair from a single training message using AI
      */
     extractTrainingData: async (trainingMessage) => {
+        if (!groq) return null;
+
         const systemPrompt = `You are a highly intelligent training data extractor for a Discord Support Bot. 
         Your goal is to understand the user's INTENT and convert it into a functional trigger (question) and response (answer).
 
@@ -199,12 +146,20 @@ Important:
         Return ONLY a valid JSON object.`;
 
         try {
-            const response = await callG4F("gpt-4", systemPrompt, trainingMessage);
-            if (!response) return null;
-            
-            return JSON.parse(response);
+            const chatCompletion = await groq.chat.completions.create({
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: trainingMessage }
+                ],
+                model: "llama-3.1-8b-instant", // Use fast model for extraction
+                temperature: 0.1,
+                response_format: { type: "json_object" }
+            });
+
+            const content = chatCompletion.choices[0]?.message?.content;
+            return JSON.parse(content);
         } catch (error) {
-            console.error('❌ [G4F EXTRACTION ERROR]', error.message);
+            console.error('❌ [AI EXTRACTION ERROR]', error.message);
             return null;
         }
     },
@@ -213,6 +168,8 @@ Important:
      * Smart AI-driven trade flow processor
      */
     processTradeMessage: async (message, currentData = {}) => {
+        if (!groq) return null;
+
         const systemPrompt = `You are the brain of a Discord Trade Support Bot. Your job is to analyze the user's message and update the trade data.
         
         Current Trade Data: ${JSON.stringify(currentData)}
@@ -242,12 +199,20 @@ Important:
         }`;
 
         try {
-            const response = await callG4F("gpt-4", systemPrompt, message);
-            if (!response) return null;
-            
-            return JSON.parse(response);
+            const chatCompletion = await groq.chat.completions.create({
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: message }
+                ],
+                model: "llama-3.1-70b-versatile",
+                temperature: 0.1,
+                response_format: { type: "json_object" }
+            });
+
+            const content = chatCompletion.choices[0]?.message?.content;
+            return JSON.parse(content);
         } catch (error) {
-            console.error('❌ [G4F TRADE PROCESS ERROR]', error.message);
+            console.error('❌ [AI TRADE PROCESS ERROR]', error.message);
             return null;
         }
     }
