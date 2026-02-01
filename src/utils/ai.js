@@ -17,15 +17,25 @@ async function checkG4FInstallation() {
     return new Promise((resolve) => {
         const process = spawn('python3', ['-c', 'import g4f; print("OK")']);
         let output = '';
+        let error = '';
         
         process.stdout.on('data', (data) => {
             output += data.toString();
+        });
+
+        process.stderr.on('data', (data) => {
+            error += data.toString();
         });
         
         process.on('close', (code) => {
             g4fInstalled = (code === 0 && output.includes('OK'));
             if (!g4fInstalled) {
-                console.warn('⚠️  g4f not installed. Install with: pip3 install -U g4f[all]');
+                console.warn('⚠️  g4f not installed or error occurred.');
+                console.error('Exit Code:', code);
+                console.error('Error Output:', error.trim());
+                console.warn('Attempting to install g4f dynamically...');
+                // Optional: try to install if missing (only works if permissions allow)
+                // spawn('pip3', ['install', '-U', 'g4f[all]']);
             }
             resolve(g4fInstalled);
         });

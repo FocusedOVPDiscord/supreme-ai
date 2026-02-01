@@ -1,8 +1,17 @@
 FROM node:20-slim
 
 # Install build dependencies for better-sqlite3
-RUN apt-get update && apt-get install -y python3 python3-pip make g++ && rm -rf /var/lib/apt/lists/*
-RUN pip3 install -U g4f[all]
+# Install Python and build dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install g4f and essential providers
+RUN pip3 install --no-cache-dir -U g4f[all]
 
 WORKDIR /app
 
