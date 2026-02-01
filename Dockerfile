@@ -1,30 +1,12 @@
-# --- Stage 1: Build Stage ---
-FROM node:20.11.0-slim AS builder
+FROM node:20-slim
 
-# Install build dependencies for native modules
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install ALL dependencies (including devDependencies if needed for build)
-# Then force a clean rebuild of better-sqlite3
-RUN npm install && npm rebuild better-sqlite3
-
-# --- Stage 2: Production Stage ---
-FROM node:20.11.0-slim
-
-# Install runtime dependencies (Python for G4F)
+# Install build dependencies for better-sqlite3 AND runtime dependencies for G4F
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-dev \
+    make \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Install g4f with the bypass flag
@@ -32,8 +14,14 @@ RUN pip3 install --no-cache-dir -U g4f[all] --break-system-packages
 
 WORKDIR /app
 
-# Copy built node_modules from builder stage
-COPY --from=builder /app/node_modules ./node_modules
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+# The postinstall script in package.json will now automatically run 'npm rebuild better-sqlite3'
+# inside this specific container environment.
+RUN npm install --production
+
 # Copy application source
 COPY . .
 
