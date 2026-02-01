@@ -61,6 +61,8 @@ async function callG4F(model, systemPrompt, userPrompt) {
         const pythonScript = `
 import sys
 import json
+import warnings
+warnings.filterwarnings("ignore")
 try:
     from g4f.client import Client
 except ImportError:
