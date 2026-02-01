@@ -17,27 +17,25 @@ async function checkG4FInstallation() {
     return new Promise((resolve) => {
         // Use full path to ensure we use the same python that has g4f installed
         const pythonPath = process.env.PYTHON_PATH || 'python3';
-        const process = spawn(pythonPath, ['-c', 'import sys; import g4f; print("OK")']);
+        const childProcess = spawn(pythonPath, ['-c', 'import sys; import g4f; print("OK")']);
         let output = '';
         let error = '';
         
-        process.stdout.on('data', (data) => {
+        childProcess.stdout.on('data', (data) => {
             output += data.toString();
         });
 
-        process.stderr.on('data', (data) => {
+        childProcess.stderr.on('data', (data) => {
             error += data.toString();
         });
         
-        process.on('close', (code) => {
+        childProcess.on('close', (code) => {
             g4fInstalled = (code === 0 && output.includes('OK'));
             if (!g4fInstalled) {
                 console.warn('⚠️  g4f not installed or error occurred.');
                 console.error('Exit Code:', code);
                 console.error('Error Output:', error.trim());
                 console.warn('Attempting to install g4f dynamically...');
-                // Optional: try to install if missing (only works if permissions allow)
-                // spawn('pip3', ['install', '-U', 'g4f[all]']);
             }
             resolve(g4fInstalled);
         });
@@ -88,19 +86,19 @@ except Exception as e:
     sys.exit(1)
 `;
 
-        const process = spawn(pythonPath, ['-c', pythonScript]);
+        const childProcess = spawn(pythonPath, ['-c', pythonScript]);
         let output = '';
         let errorOutput = '';
 
-        process.stdout.on('data', (data) => {
+        childProcess.stdout.on('data', (data) => {
             output += data.toString();
         });
 
-        process.stderr.on('data', (data) => {
+        childProcess.stderr.on('data', (data) => {
             errorOutput += data.toString();
         });
 
-        process.on('close', (code) => {
+        childProcess.on('close', (code) => {
             if (code === 0 && output.trim()) {
                 resolve(output.trim());
             } else {
@@ -111,7 +109,7 @@ except Exception as e:
 
         // Timeout after 30 seconds
         setTimeout(() => {
-            process.kill();
+            childProcess.kill();
             resolve(null);
         }, 30000);
     });
