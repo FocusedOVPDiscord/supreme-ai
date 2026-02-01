@@ -1,4 +1,5 @@
-FROM node:20-slim
+# Use a specific LTS version to ensure consistency
+FROM node:20.11.0-slim
 
 # Install build dependencies for better-sqlite3
 # Install Python and build dependencies
@@ -21,8 +22,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies
-RUN npm install --production
+# Install production dependencies and force rebuild of native modules
+# This ensures better-sqlite3 is compiled for the correct Node.js version
+RUN npm install --production && npm rebuild better-sqlite3
 
 # Copy source code
 COPY . .
