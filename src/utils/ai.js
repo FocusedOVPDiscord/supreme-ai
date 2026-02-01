@@ -15,7 +15,9 @@ async function checkG4FInstallation() {
     if (g4fInstalled !== null) return g4fInstalled;
     
     return new Promise((resolve) => {
-        const process = spawn('python3', ['-c', 'import g4f; print("OK")']);
+        // Use full path to ensure we use the same python that has g4f installed
+        const pythonPath = process.env.PYTHON_PATH || 'python3';
+        const process = spawn(pythonPath, ['-c', 'import sys; import g4f; print("OK")']);
         let output = '';
         let error = '';
         
@@ -57,10 +59,18 @@ async function callG4F(model, systemPrompt, userPrompt) {
     }
 
     return new Promise((resolve) => {
+        const pythonPath = process.env.PYTHON_PATH || 'python3';
         const pythonScript = `
 import sys
 import json
-from g4f.client import Client
+try:
+    from g4f.client import Client
+except ImportError:
+    import os
+    # Try to add common paths if missing
+    sys.path.append('/usr/local/lib/python3.11/dist-packages')
+    sys.path.append('/usr/local/lib/python3.10/dist-packages')
+    from g4f.client import Client
 
 try:
     client = Client()
@@ -78,7 +88,7 @@ except Exception as e:
     sys.exit(1)
 `;
 
-        const process = spawn('python3', ['-c', pythonScript]);
+        const process = spawn(pythonPath, ['-c', pythonScript]);
         let output = '';
         let errorOutput = '';
 
