@@ -109,22 +109,21 @@ except Exception as e:
             }
         });
 
-        // Timeout after 30 seconds
+        // Shorter timeout (15s) to prevent hanging processes on Nano instance
         setTimeout(() => {
-            childProcess.kill();
+            if (!childProcess.killed) {
+                childProcess.kill('SIGKILL');
+            }
             resolve(null);
-        }, 30000);
+        }, 15000);
     });
 }
 
-// List of models to try in order of preference
-// These are all FREE and require NO authentication
+// List of models optimized for Nano instance (fast & lightweight)
 const MODELS = [
-    "gpt-4",           // Via AnyProvider (aggregates multiple sources)
-    "gpt-5",           // Via AnyProvider (latest model)
-    "meta-ai",         // Via MetaAI (very reliable)
-    "qwen-max",        // Via Qwen (powerful Chinese model)
-    "gpt-4o-mini",     // Fallback option
+    "gpt-4o-mini",     // Extremely fast, low resource
+    "meta-ai",         // Reliable and fast
+    "gpt-4",           // Quality fallback
 ];
 
 module.exports = {

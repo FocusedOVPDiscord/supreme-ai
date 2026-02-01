@@ -1,25 +1,24 @@
 FROM node:20-slim
 
-# Install build dependencies for sqlite3 AND runtime dependencies for G4F
+# Install only essential build and runtime dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-dev \
     make \
     g++ \
-    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install g4f with the bypass flag
-RUN pip3 install --no-cache-dir -U g4f[all] --break-system-packages
+# Install MINIMAL g4f (without heavy [all] extras)
+# This significantly reduces memory and CPU usage during build and run
+RUN pip3 install --no-cache-dir -U g4f --break-system-packages
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-# The postinstall script in package.json will run 'npm rebuild sqlite3'
+# Install production dependencies
 RUN npm install --production
 
 # Copy application source
