@@ -25,7 +25,7 @@ const commands = [
                     return await interaction.editReply({ content: '❌ Failed to process training message. Please be more specific.' });
                 }
 
-                const result = db.addTraining(extracted.question, extracted.answer, 'general');
+                const result = await db.addTraining(extracted.question, extracted.answer, 'general');
                 
                 const tokenCount = Math.floor(Math.random() * (3000 - 2000) + 2000);
                 const successMessage = `✅ Your training input has been saved to improve the AI's responses in this server.\n-# ${tokenCount} tokens`;
@@ -43,20 +43,20 @@ const commands = [
             .setDescription('Check bot and AI status'),
         async execute(interaction) {
             await interaction.deferReply();
-            const stats = db.getStats();
+            const stats = await db.getStats();
             const aiReady = await ai.checkHealth();
             const embed = new EmbedBuilder()
                 .setTitle('🤖 Supreme AI Status')
                 .setColor(aiReady ? 0x00ff00 : 0xff0000)
                 .addFields(
-                    { name: '🔌 Groq AI', value: aiReady ? '✅ Online' : '❌ Offline', inline: true },
+                    { name: '🔌 AI Engine', value: aiReady ? '✅ Online (G4F)' : '❌ Offline', inline: true },
                     { name: '📚 Training Entries', value: stats.trainingCount.toString(), inline: true },
                     { name: '🎫 Open Tickets', value: stats.ticketCount.toString(), inline: true },
                     { name: '📊 Total Tickets', value: stats.totalTickets.toString(), inline: true },
                     { name: '💬 Total Messages', value: stats.conversationCount.toString(), inline: true },
                     { name: '⏱️ Uptime', value: `${Math.floor(process.uptime() / 60)} minutes`, inline: true }
                 )
-                .setFooter({ text: 'Supreme AI • Powered by Groq' })
+                .setFooter({ text: 'Supreme AI • Powered by G4F' })
                 .setTimestamp();
             await interaction.editReply({ embeds: [embed] });
         }
@@ -81,7 +81,7 @@ const commands = [
             
             if (sub === 'list') {
                 const category = interaction.options.getString('category');
-                const data = category ? db.getTrainingByCategory(category) : db.getAllTraining();
+                const data = category ? await db.getTrainingByCategory(category) : await db.getAllTraining();
                 if (data.length === 0) return interaction.reply({ content: '📚 No training data found.', ephemeral: true });
                 
                 const chunk = data.slice(0, 10);
@@ -100,7 +100,7 @@ const commands = [
             } else if (sub === 'delete') {
                 const id = interaction.options.getInteger('id');
                 try {
-                    db.deleteTraining(id);
+                    await db.deleteTraining(id);
                     await interaction.reply({ content: `✅ Deleted training entry **#${id}**` });
                 } catch (error) {
                     await interaction.reply({ content: '❌ Failed to delete entry', ephemeral: true });
@@ -129,13 +129,13 @@ const commands = [
                 const id = interaction.options.getString('id');
                 const ticketId = id.startsWith('ticket-') ? id : `ticket-${id.padStart(4, '0')}`;
                 try {
-                    db.updateTicketStatus(ticketId, 'closed');
-                    db.updateTicketState(ticketId, null, {}); // Reset state
+                    await db.updateTicketStatus(ticketId, 'closed');
+                    await db.updateTicketState(ticketId, null, {}); // Reset state
                     await interaction.reply({ content: `✅ Ticket **${ticketId}** closed.` });
                 } catch (error) { await interaction.reply({ content: '❌ Failed to close ticket', ephemeral: true }); }
             } else if (sub === 'list') {
                 const status = interaction.options.getString('status');
-                const tickets = db.getAllTickets(status);
+                const tickets = await db.getAllTickets(status);
                 if (tickets.length === 0) return interaction.reply({ content: '🎫 No tickets found.', ephemeral: true });
                 const description = tickets.slice(0, 15).map(t => `${t.status === 'open' ? '🟢' : '🔴'} **${t.id}**`).join('\n');
                 const embed = new EmbedBuilder().setTitle('🎫 Tickets').setDescription(description).setColor(0x2ecc71);

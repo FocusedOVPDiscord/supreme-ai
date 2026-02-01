@@ -55,8 +55,6 @@ client.on(Events.InteractionCreate, async interaction => {
             await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
         }
     }
-
-
 });
 
 function isTicketChannel(channel) {
@@ -75,19 +73,19 @@ client.on(Events.MessageCreate, async message => {
     if (message.author.bot || !isTicketChannel(message.channel)) return;
     
     const ticketId = getTicketId(message.channel.name);
-    db.addConversation(ticketId, message.author.id, message.content);
+    await db.addConversation(ticketId, message.author.id, message.content);
 
     if (message.member && message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-        const ticket = db.getTicket(ticketId);
+        const ticket = await db.getTicket(ticketId);
         if (ticket && ticket.current_step_id !== -1) {
-            db.updateTicketState(ticketId, -1, {});
+            await db.updateTicketState(ticketId, -1, {});
             await message.channel.send('⚠️ AI has been disabled for this ticket. Reason: A staff member has joined the conversation.');
         }
         return;
     }
     
     try {
-        const ticket = db.getTicket(ticketId);
+        const ticket = await db.getTicket(ticketId);
         if (ticket && ticket.current_step_id === -1) return;
 
         let collectedData = ticket?.collected_data ? JSON.parse(ticket.collected_data) : {};
@@ -107,12 +105,11 @@ client.on(Events.MessageCreate, async message => {
             const finalResponse = `${greetingResponse}\n-# ${tokenCount} tokens`;
             
             await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
-            db.addConversation(ticketId, client.user.id, finalResponse, 1);
+            await db.addConversation(ticketId, client.user.id, finalResponse, 1);
             return;
         }
 
         // 2. Use the SMART AI-driven trade logic
-        // If the user says "trade" or we are already in a trade flow
         if (message.content.toLowerCase().includes('trade') || (currentStep > 0 && currentStep < 8)) {
             await message.channel.sendTyping();
             
@@ -120,41 +117,33 @@ client.on(Events.MessageCreate, async message => {
             
             if (aiResult) {
                 const nextStep = aiResult.is_complete ? 8 : (currentStep === 0 ? 1 : currentStep);
-                db.updateTicketState(ticketId, nextStep, aiResult.updated_data);
+                await db.updateTicketState(ticketId, nextStep, aiResult.updated_data);
 
                 let finalResponse = aiResult.bot_response;
                 
-                // If complete, format the final summary professionally
                 if (aiResult.is_complete) {
                     finalResponse = `Trade Setup (Final)\n<@${message.author.id}> is trading with ${aiResult.updated_data.partner_id}\n<@${message.author.id}> gives:\n\n${aiResult.updated_data.user_item} x${aiResult.updated_data.user_qty}\n${aiResult.updated_data.partner_id} gives:\n\n${aiResult.updated_data.partner_item} x${aiResult.updated_data.partner_qty}\n\nBoth of you, please type confirm in this ticket if everything is correct.`;
                 }
 
                 await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
-                db.addConversation(ticketId, client.user.id, finalResponse, 1);
+                await db.addConversation(ticketId, client.user.id, finalResponse, 1);
                 return;
             }
         }
 
-        // If not in trade flow, then use AI with Training Priority
+        // 3. Training Match or AI Fallback
         await message.channel.sendTyping();
 
-        // 1. Check for trained response first (85% priority)
-        const trainedMatch = db.searchSimilar(message.content);
+        const trainedMatch = await db.searchSimilar(message.content);
         const useTrained = Math.random() < 0.85;
 
         let response;
         if (trainedMatch && useTrained) {
             console.log(`🎯 [TRAINING] Using trained response for: "${message.content}"`);
-            
-            // Apply dynamic formatting (replace {user}, {item}, etc.)
             response = formatter.formatResponse(trainedMatch.response, message, collectedData);
-            
-            db.incrementUsage(trainedMatch.id);
+            await db.incrementUsage(trainedMatch.id);
         } else {
-            // 2. Fallback to AI if no match or 15% chance
             console.log(`🤖 [AI] Generating AI response for: "${message.content}"`);
-            
-            // Include trade context in the AI prompt for better recognition
             const tradeContext = collectedData ? `\n[Current Trade Data]: ${JSON.stringify(collectedData)}` : "";
             response = await ai.generateResponse(message.content, tradeContext);
         }
@@ -163,7 +152,7 @@ client.on(Events.MessageCreate, async message => {
             const tokenCount = Math.floor(Math.random() * (10500 - 9000) + 9000);
             const finalResponse = `${response}\n-# ${tokenCount} tokens`;
             await message.reply({ content: finalResponse, allowedMentions: { repliedUser: false } });
-            db.addConversation(ticketId, client.user.id, finalResponse, 1);
+            await db.addConversation(ticketId, client.user.id, finalResponse, 1);
         }
     } catch (error) { console.error('Processing error:', error); }
 });

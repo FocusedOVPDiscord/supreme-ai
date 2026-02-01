@@ -1,4 +1,4 @@
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
@@ -24,75 +24,116 @@ try {
 }
 console.log('-------------------------------------------');
 
-const db = new Database(finalDbPath);
-db.pragma('foreign_keys = OFF');
+// Initialize database
+const db = new sqlite3.Database(finalDbPath);
 
-// --- SCHEMA MIGRATION / INITIALIZATION ---
-db.exec(`
-    CREATE TABLE IF NOT EXISTS training (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        query TEXT NOT NULL,
-        response TEXT NOT NULL,
-        category TEXT DEFAULT 'general',
-        usage_count INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-`);
+// Helper to run queries as promises
+const run = (query, params = []) => {
+    return new Promise((resolve, reject) => {
+        db.run(query, params, function(err) {
+            if (err) reject(err);
+            else resolve(this);
+        });
+    });
+};
 
-// Check and add missing columns for flow features
-const tableInfo = db.prepare("PRAGMA table_info(training)").all();
-const columns = tableInfo.map(c => c.name);
+const get = (query, params = []) => {
+    return new Promise((resolve, reject) => {
+        db.get(query, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+        });
+    });
+};
 
-if (!columns.includes('next_step_id')) {
-    console.log('🛠️ [DATABASE] Adding missing column: next_step_id');
-    db.exec("ALTER TABLE training ADD COLUMN next_step_id INTEGER");
-}
-if (!columns.includes('data_point_name')) {
-    console.log('🛠️ [DATABASE] Adding missing column: data_point_name');
-    db.exec("ALTER TABLE training ADD COLUMN data_point_name TEXT");
-}
+const all = (query, params = []) => {
+    return new Promise((resolve, reject) => {
+        db.all(query, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+        });
+    });
+};
 
-db.exec(`
-    CREATE TABLE IF NOT EXISTS tickets (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        category TEXT DEFAULT 'general',
-        status TEXT DEFAULT 'open',
-        current_step_id INTEGER,
-        collected_data TEXT,
-        ai_resolved INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+const exec = (query) => {
+    return new Promise((resolve, reject) => {
+        db.exec(query, (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+};
 
-    CREATE TABLE IF NOT EXISTS conversations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ticket_id TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        message TEXT NOT NULL,
-        is_ai INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-`);
+// Initialize schema
+(async () => {
+    try {
+        await exec(`
+            CREATE TABLE IF NOT EXISTS training (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                query TEXT NOT NULL,
+                response TEXT NOT NULL,
+                category TEXT DEFAULT 'general',
+                usage_count INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
 
-console.log('🚀 [DATABASE] Supreme Summary Engine initialized and migrated.');
+        // Check and add missing columns for flow features
+        const tableInfo = await all("PRAGMA table_info(training)");
+        const columns = tableInfo.map(c => c.name);
+
+        if (!columns.includes('next_step_id')) {
+            console.log('🛠️ [DATABASE] Adding missing column: next_step_id');
+            await exec("ALTER TABLE training ADD COLUMN next_step_id INTEGER");
+        }
+        if (!columns.includes('data_point_name')) {
+            console.log('🛠️ [DATABASE] Adding missing column: data_point_name');
+            await exec("ALTER TABLE training ADD COLUMN data_point_name TEXT");
+        }
+
+        await exec(`
+            CREATE TABLE IF NOT EXISTS tickets (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                category TEXT DEFAULT 'general',
+                status TEXT DEFAULT 'open',
+                current_step_id INTEGER,
+                collected_data TEXT,
+                ai_resolved INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                message TEXT NOT NULL,
+                is_ai INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        console.log('🚀 [DATABASE] Supreme Summary Engine initialized and migrated.');
+    } catch (err) {
+        console.error('❌ [DATABASE ERROR] Initialization failed:', err.message);
+    }
+})();
 
 module.exports = {
     // --- Flow & State Management ---
-    getTicket: (ticketId) => {
+    getTicket: async (ticketId) => {
         try {
-            return db.prepare("SELECT * FROM tickets WHERE id = ?").get(ticketId);
+            return await get("SELECT * FROM tickets WHERE id = ?", [ticketId]);
         } catch (e) { return null; }
     },
 
-    updateTicketState: (ticketId, stepId, collectedData = null) => {
+    updateTicketState: async (ticketId, stepId, collectedData = null) => {
         try {
             console.log(`💾 [DATABASE DEBUG] Updating Ticket State: ${ticketId} | Step: ${stepId}`);
             if (collectedData !== null) {
-                const stmt = db.prepare("UPDATE tickets SET current_step_id = ?, collected_data = ? WHERE id = ?");
-                return stmt.run(stepId, JSON.stringify(collectedData), ticketId);
+                return await run("UPDATE tickets SET current_step_id = ?, collected_data = ? WHERE id = ?", [stepId, JSON.stringify(collectedData), ticketId]);
             } else {
-                const stmt = db.prepare("UPDATE tickets SET current_step_id = ? WHERE id = ?");
-                return stmt.run(stepId, ticketId);
+                return await run("UPDATE tickets SET current_step_id = ? WHERE id = ?", [stepId, ticketId]);
             }
         } catch (e) { 
             console.error(`❌ [DATABASE ERROR] updateTicketState:`, e.message);
@@ -100,19 +141,18 @@ module.exports = {
         }
     },
 
-    getTrainingById: (id) => {
+    getTrainingById: async (id) => {
         try {
-            return db.prepare("SELECT * FROM training WHERE id = ?").get(id);
+            return await get("SELECT * FROM training WHERE id = ?", [id]);
         } catch (e) { return null; }
     },
 
     // --- Conversation Logging ---
-    addConversation: (ticketId, userId, message, isAi = 0) => {
+    addConversation: async (ticketId, userId, message, isAi = 0) => {
         try {
             console.log(`📝 [DATABASE DEBUG] Saving Conversation: [${ticketId}] ${isAi ? 'AI' : 'User'}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`);
-            db.prepare("INSERT OR IGNORE INTO tickets (id, user_id, status) VALUES (?, ?, 'open')").run(ticketId, userId);
-            const stmt = db.prepare("INSERT INTO conversations (ticket_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)");
-            return stmt.run(ticketId, userId, message, isAi);
+            await run("INSERT OR IGNORE INTO tickets (id, user_id, status) VALUES (?, ?, 'open')", [ticketId, userId]);
+            return await run("INSERT INTO conversations (ticket_id, user_id, message, is_ai) VALUES (?, ?, ?, ?)", [ticketId, userId, message, isAi]);
         } catch (error) {
             console.error('🛡️ [DATABASE SAFETY] Blocked crash:', error.message);
             return null;
@@ -120,92 +160,93 @@ module.exports = {
     },
 
     // --- Training System ---
-    addTraining: (query, response, category = 'general', nextStepId = null, dataPointName = null) => {
+    addTraining: async (query, response, category = 'general', nextStepId = null, dataPointName = null) => {
         console.log(`📚 [DATABASE DEBUG] Adding Training Entry: ${query.substring(0, 30)}...`);
-        const stmt = db.prepare('INSERT INTO training (query, response, category, next_step_id, data_point_name) VALUES (?, ?, ?, ?, ?)');
-        return stmt.run(query, response, category, nextStepId, dataPointName); 
+        return await run('INSERT INTO training (query, response, category, next_step_id, data_point_name) VALUES (?, ?, ?, ?, ?)', [query, response, category, nextStepId, dataPointName]);
     },
     
-    getAllTraining: () => {
-        try { return db.prepare('SELECT * FROM training ORDER BY created_at DESC').all(); } catch (e) { return []; }
+    getAllTraining: async () => {
+        try { return await all('SELECT * FROM training ORDER BY created_at DESC'); } catch (e) { return []; }
     },
 
-    getTrainingByCategory: (category) => {
-        try { return db.prepare('SELECT * FROM training WHERE category = ? ORDER BY created_at DESC').all(category); } catch (e) { return []; }
+    getTrainingByCategory: async (category) => {
+        try { return await all('SELECT * FROM training WHERE category = ? ORDER BY created_at DESC', [category]); } catch (e) { return []; }
     },
     
-    deleteTraining: (id) => {
+    deleteTraining: async (id) => {
         try { 
             console.log(`🗑️ [DATABASE DEBUG] Deleting Training ID: ${id}`);
-            return db.prepare('DELETE FROM training WHERE id = ?').run(id); 
+            return await run('DELETE FROM training WHERE id = ?', [id]); 
         } catch (e) { return null; }
     },
     
-    searchSimilar: (query) => {
+    searchSimilar: async (query) => {
         try {
             const q = query.toLowerCase().trim();
             
             // 1. Exact match
-            let res = db.prepare('SELECT * FROM training WHERE LOWER(query) = ? LIMIT 1').get(q);
+            let res = await get('SELECT * FROM training WHERE LOWER(query) = ? LIMIT 1', [q]);
             if (res) return res;
 
             // 2. Keyword match (if query contains the trained phrase)
-            res = db.prepare("SELECT * FROM training WHERE ? LIKE '%' || LOWER(query) || '%' ORDER BY LENGTH(query) DESC LIMIT 1").get(q);
+            res = await get("SELECT * FROM training WHERE ? LIKE '%' || LOWER(query) || '%' ORDER BY LENGTH(query) DESC LIMIT 1", [q]);
             if (res) return res;
 
             // 3. Partial match (if trained phrase contains the query)
-            return db.prepare('SELECT * FROM training WHERE LOWER(query) LIKE ? ORDER BY usage_count DESC LIMIT 1').get(`%${q}%`);
+            return await get('SELECT * FROM training WHERE LOWER(query) LIKE ? ORDER BY usage_count DESC LIMIT 1', [`%${q}%`]);
         } catch (e) { 
             console.error('❌ [DATABASE] searchSimilar error:', e.message);
             return null; 
         }
     },
     
-    incrementUsage: (id) => {
-        try { return db.prepare('UPDATE training SET usage_count = usage_count + 1 WHERE id = ?').run(id); } catch (e) { return null; }
+    incrementUsage: async (id) => {
+        try { return await run('UPDATE training SET usage_count = usage_count + 1 WHERE id = ?', [id]); } catch (e) { return null; }
     },
     
-    updateTicketStatus: (id, status) => {
+    updateTicketStatus: async (id, status) => {
         try { 
             console.log(`🎫 [DATABASE DEBUG] Updating Ticket Status: ${id} -> ${status}`);
-            return db.prepare('UPDATE tickets SET status = ? WHERE id = ?').run(status, id); 
+            return await run('UPDATE tickets SET status = ? WHERE id = ?', [status, id]); 
         } catch (e) { return null; }
     },
     
-    getTicketHistory: (ticketId, limit = 10) => {
-        try { return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?').all(ticketId, limit).reverse(); } catch (e) { return []; }
-    },
-
-    getAllConversations: (ticketId) => {
-        try { return db.prepare('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at ASC').all(ticketId); } catch (e) { return []; }
-    },
-
-    getAllTickets: (status = null) => {
-        try {
-            if (status) return db.prepare('SELECT * FROM tickets WHERE status = ? ORDER BY created_at DESC').all(status);
-            return db.prepare('SELECT * FROM tickets ORDER BY created_at DESC').all();
+    getTicketHistory: async (ticketId, limit = 10) => {
+        try { 
+            const rows = await all('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at DESC LIMIT ?', [ticketId, limit]);
+            return rows.reverse();
         } catch (e) { return []; }
     },
 
-    getTopTraining: (limit = 10) => {
-        try { return db.prepare('SELECT * FROM training ORDER BY usage_count DESC LIMIT ?').all(limit); } catch (e) { return []; }
+    getAllConversations: async (ticketId) => {
+        try { return await all('SELECT * FROM conversations WHERE ticket_id = ? ORDER BY created_at ASC', [ticketId]); } catch (e) { return []; }
     },
 
-    markResolvedByAI: (id) => {
+    getAllTickets: async (status = null) => {
+        try {
+            if (status) return await all('SELECT * FROM tickets WHERE status = ? ORDER BY created_at DESC', [status]);
+            return await all('SELECT * FROM tickets ORDER BY created_at DESC');
+        } catch (e) { return []; }
+    },
+
+    getTopTraining: async (limit = 10) => {
+        try { return await all('SELECT * FROM training ORDER BY usage_count DESC LIMIT ?', [limit]); } catch (e) { return []; }
+    },
+
+    markResolvedByAI: async (id) => {
         try { 
             console.log(`✅ [DATABASE DEBUG] Ticket Marked Resolved by AI: ${id}`);
-            return db.prepare('UPDATE tickets SET ai_resolved = 1 WHERE id = ?').run(id); 
+            return await run('UPDATE tickets SET ai_resolved = 1 WHERE id = ?', [id]); 
         } catch (e) { return null; }
     },
 
-    getStats: () => {
+    getStats: async () => {
         try {
-            return { 
-                trainingCount: db.prepare('SELECT COUNT(*) as count FROM training').get().count, 
-                ticketCount: db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status = 'open'").get().count, 
-                conversationCount: db.prepare('SELECT COUNT(*) as count FROM conversations').get().count, 
-                totalTickets: db.prepare('SELECT COUNT(*) as count FROM tickets').get().count 
-            };
+            const trainingCount = (await get('SELECT COUNT(*) as count FROM training')).count;
+            const ticketCount = (await get("SELECT COUNT(*) as count FROM tickets WHERE status = 'open'")).count;
+            const conversationCount = (await get('SELECT COUNT(*) as count FROM conversations')).count;
+            const totalTickets = (await get('SELECT COUNT(*) as count FROM tickets')).count;
+            return { trainingCount, ticketCount, conversationCount, totalTickets };
         } catch (e) { return { trainingCount: 0, ticketCount: 0, conversationCount: 0, totalTickets: 0 }; }
     }
 };

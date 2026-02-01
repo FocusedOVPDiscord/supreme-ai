@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# Install build dependencies for better-sqlite3 AND runtime dependencies for G4F
+# Install build dependencies for sqlite3 AND runtime dependencies for G4F
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
@@ -18,8 +18,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-# The postinstall script in package.json will now automatically run 'npm rebuild better-sqlite3'
-# inside this specific container environment.
+# The postinstall script in package.json will run 'npm rebuild sqlite3'
 RUN npm install --production
 
 # Copy application source
