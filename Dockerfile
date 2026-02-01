@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install g4f and essential providers
-RUN pip3 install --no-cache-dir -U g4f[all]
+RUN pip3 install --no-cache-dir -U g4f[all] --break-system-packages
 
 # Verify installation during build
 RUN python3 -c "import g4f; print('G4F installed successfully')"
