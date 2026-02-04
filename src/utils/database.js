@@ -103,15 +103,22 @@ const exec = (query) => {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
-            CREATE TABLE IF NOT EXISTS conversations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_id TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                message TEXT NOT NULL,
-                is_ai INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
+	            CREATE TABLE IF NOT EXISTS conversations (
+	                id INTEGER PRIMARY KEY AUTOINCREMENT,
+	                ticket_id TEXT NOT NULL,
+	                user_id TEXT NOT NULL,
+	                message TEXT NOT NULL,
+	                is_ai INTEGER DEFAULT 0,
+	                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	            );
+	
+	            CREATE TABLE IF NOT EXISTS settings (
+	                key TEXT PRIMARY KEY,
+	                value TEXT
+	            );
+	
+	            INSERT OR IGNORE INTO settings (key, value) VALUES ('ai_enabled', 'true');
+	        `);
 
         console.log('🚀 [DATABASE] Supreme Summary Engine initialized and migrated.');
     } catch (err) {
@@ -240,7 +247,21 @@ module.exports = {
         } catch (e) { return null; }
     },
 
-    getStats: async () => {
+	    // --- Settings Management ---
+	    getSetting: async (key) => {
+	        try {
+	            const row = await get("SELECT value FROM settings WHERE key = ?", [key]);
+	            return row ? row.value : null;
+	        } catch (e) { return null; }
+	    },
+	
+	    updateSetting: async (key, value) => {
+	        try {
+	            return await run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value]);
+	        } catch (e) { return null; }
+	    },
+	
+	    getStats: async () => {
         try {
             const trainingCount = (await get('SELECT COUNT(*) as count FROM training')).count;
             const ticketCount = (await get("SELECT COUNT(*) as count FROM tickets WHERE status = 'open'")).count;

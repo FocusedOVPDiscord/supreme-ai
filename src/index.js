@@ -84,9 +84,12 @@ client.on(Events.MessageCreate, async message => {
         return;
     }
     
-    try {
-        const ticket = await db.getTicket(ticketId);
-        if (ticket && ticket.current_step_id === -1) return;
+	    try {
+	        const aiEnabled = await db.getSetting('ai_enabled');
+	        if (aiEnabled === 'false') return;
+
+	        const ticket = await db.getTicket(ticketId);
+	        if (ticket && ticket.current_step_id === -1) return;
 
         let collectedData = ticket?.collected_data ? JSON.parse(ticket.collected_data) : {};
         let currentStep = ticket?.current_step_id || 0;

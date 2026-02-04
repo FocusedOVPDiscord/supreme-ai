@@ -108,9 +108,39 @@ const commands = [
             }
         }
     },
-    {
-        data: new SlashCommandBuilder()
-            .setName('ticket')
+	    {
+	        data: new SlashCommandBuilder()
+	            .setName('toggle_ai')
+	            .setDescription('Enable or disable the AI system')
+	            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+	            .addStringOption(option =>
+	                option.setName('status')
+	                    .setDescription('Status to set')
+	                    .setRequired(true)
+	                    .addChoices(
+	                        { name: 'Enable', value: 'true' },
+	                        { name: 'Disable', value: 'false' }
+	                    )
+	            ),
+	        async execute(interaction) {
+	            const status = interaction.options.getString('status');
+	            const isEnabled = status === 'true';
+	            
+	            try {
+	                await db.updateSetting('ai_enabled', status);
+	                await interaction.reply({ 
+	                    content: `✅ AI System has been **${isEnabled ? 'ENABLED' : 'DISABLED'}**.`,
+	                    ephemeral: false 
+	                });
+	            } catch (error) {
+	                console.error('❌ [TOGGLE_AI ERROR]', error);
+	                await interaction.reply({ content: '❌ Failed to update AI status.', ephemeral: true });
+	            }
+	        }
+	    },
+	    {
+	        data: new SlashCommandBuilder()
+	            .setName('ticket')
             .setDescription('Ticket management commands')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
             .addSubcommand(sub => 
