@@ -78,30 +78,43 @@ const exec = (query) => {
             );
         `);
 
-        // Check and add missing columns for flow features
-        const tableInfo = await all("PRAGMA table_info(training)");
-        const columns = tableInfo.map(c => c.name);
+	        // Check and add missing columns for flow features (training table)
+	        const trainingTableInfo = await all("PRAGMA table_info(training)");
+	        const trainingColumns = trainingTableInfo.map(c => c.name);
+	
+	        if (!trainingColumns.includes('next_step_id')) {
+	            console.log('🛠️ [DATABASE] Adding missing column: training.next_step_id');
+	            await exec("ALTER TABLE training ADD COLUMN next_step_id INTEGER");
+	        }
+	        if (!trainingColumns.includes('data_point_name')) {
+	            console.log('🛠️ [DATABASE] Adding missing column: training.data_point_name');
+	            await exec("ALTER TABLE training ADD COLUMN data_point_name TEXT");
+	        }
+	
+	        // Check and add missing columns for flow features (tickets table)
+	        const ticketsTableInfo = await all("PRAGMA table_info(tickets)");
+	        const ticketsColumns = ticketsTableInfo.map(c => c.name);
+	
+	        if (!ticketsColumns.includes('current_step_id')) {
+	            console.log('🛠️ [DATABASE] Adding missing column: tickets.current_step_id');
+	            await exec("ALTER TABLE tickets ADD COLUMN current_step_id INTEGER DEFAULT 0");
+	        }
+	        if (!ticketsColumns.includes('collected_data')) {
+	            console.log('🛠️ [DATABASE] Adding missing column: tickets.collected_data');
+	            await exec("ALTER TABLE tickets ADD COLUMN collected_data TEXT");
+	        }
 
-        if (!columns.includes('next_step_id')) {
-            console.log('🛠️ [DATABASE] Adding missing column: next_step_id');
-            await exec("ALTER TABLE training ADD COLUMN next_step_id INTEGER");
-        }
-        if (!columns.includes('data_point_name')) {
-            console.log('🛠️ [DATABASE] Adding missing column: data_point_name');
-            await exec("ALTER TABLE training ADD COLUMN data_point_name TEXT");
-        }
-
-        await exec(`
-            CREATE TABLE IF NOT EXISTS tickets (
-                id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                category TEXT DEFAULT 'general',
-                status TEXT DEFAULT 'open',
-                current_step_id INTEGER,
-                collected_data TEXT,
-                ai_resolved INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
+	        await exec(`
+	            CREATE TABLE IF NOT EXISTS tickets (
+	                id TEXT PRIMARY KEY,
+	                user_id TEXT NOT NULL,
+	                category TEXT DEFAULT 'general',
+	                status TEXT DEFAULT 'open',
+	                current_step_id INTEGER DEFAULT 0,
+	                collected_data TEXT,
+	                ai_resolved INTEGER DEFAULT 0,
+	                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	            );
 
 	            CREATE TABLE IF NOT EXISTS conversations (
 	                id INTEGER PRIMARY KEY AUTOINCREMENT,

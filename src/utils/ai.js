@@ -122,9 +122,10 @@ except Exception as e:
 
 // List of models optimized for Nano instance (fast & lightweight)
 const MODELS = [
-    "gpt-4o-mini",     // Extremely fast, low resource
-    "meta-ai",         // Reliable and fast
     "gpt-4",           // Quality fallback
+    "gpt-3.5-turbo",   // Reliable
+    "meta-ai",         // Fast
+    "gemini-pro",      // Alternative
 ];
 
 module.exports = {
