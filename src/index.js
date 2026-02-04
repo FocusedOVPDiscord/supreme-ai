@@ -57,8 +57,13 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-function isTicketChannel(channel) {
+async function isTicketChannel(channel) {
     if (!channel || ![ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread].includes(channel.type)) return false;
+    
+    // Check if this is an external bot's category
+    const externalCategoryId = await db.getSetting('external_category_id');
+    if (externalCategoryId && channel.parent?.id === externalCategoryId) return true;
+
     if (process.env.TICKET_CATEGORY_ID && channel.parent?.id !== process.env.TICKET_CATEGORY_ID) return false;
     const name = channel.name.toLowerCase();
     return /ticket|support|help|claim|order|issue/i.test(name) || /^\d+$/.test(name);
@@ -70,7 +75,24 @@ function getTicketId(channelName) {
 }
 
 client.on(Events.MessageCreate, async message => {
-    if (message.author.bot || !isTicketChannel(message.channel)) return;
+    // Support external bot tickets: if message is from a bot, check if it's the connected bot
+    const externalBotId = await db.getSetting('external_bot_id');
+    const isExternalBot = message.author.bot && externalBotId && message.author.id === externalBotId;
+    
+    // If it's a bot but NOT the connected bot, ignore it
+    if (message.author.bot && !isExternalBot) return;
+
+    const isTicket = await isTicketChannel(message.channel);
+    if (!isTicket) return;
+
+    // If it's the external bot, we just log it or handle specific triggers if needed
+    // But for now, we want the AI to respond to USER messages in these channels.
+    // So if message is from the external bot, we just save the conversation.
+    if (isExternalBot) {
+        const ticketId = getTicketId(message.channel.name);
+        await db.addConversation(ticketId, message.author.id, message.content);
+        return;
+    }
     
     const ticketId = getTicketId(message.channel.name);
     await db.addConversation(ticketId, message.author.id, message.content);

@@ -140,6 +140,39 @@ const commands = [
 	    },
 	    {
 	        data: new SlashCommandBuilder()
+	            .setName('connect_bot')
+	            .setDescription('Connect AI to another bot\'s ticket system')
+	            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+	            .addStringOption(option =>
+	                option.setName('bot_id')
+	                    .setDescription('The ID of the ticket bot to watch')
+	                    .setRequired(true)
+	            )
+	            .addStringOption(option =>
+	                option.setName('category_id')
+	                    .setDescription('The Category ID where the other bot creates tickets')
+	                    .setRequired(false)
+	            ),
+	        async execute(interaction) {
+	            const botId = interaction.options.getString('bot_id');
+	            const categoryId = interaction.options.getString('category_id');
+	            
+	            try {
+	                await db.updateSetting('external_bot_id', botId);
+	                if (categoryId) await db.updateSetting('external_category_id', categoryId);
+	                
+	                await interaction.reply({ 
+	                    content: `✅ AI now connected to external bot **${botId}**.${categoryId ? ` Watching category **${categoryId}**.` : ''}`,
+	                    ephemeral: false 
+	                });
+	            } catch (error) {
+	                console.error('❌ [CONNECT_BOT ERROR]', error);
+	                await interaction.reply({ content: '❌ Failed to connect bot.', ephemeral: true });
+	            }
+	        }
+	    },
+	    {
+	        data: new SlashCommandBuilder()
 	            .setName('ticket')
             .setDescription('Ticket management commands')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
