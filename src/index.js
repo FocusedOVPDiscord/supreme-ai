@@ -9,6 +9,7 @@ http.createServer((req, res) => {
 }).listen(port, () => {
     console.log(`✅ [HEALTH CHECK] Listening on port ${port}`);
 });
+
 const { Client, GatewayIntentBits, Collection, REST, Routes, Events, ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const db = require('./utils/database');
 const ai = require('./utils/ai');
@@ -123,12 +124,12 @@ client.on(Events.MessageCreate, async message => {
         return;
     }
     
-	    try {
-	        const aiEnabled = await db.getSetting('ai_enabled');
-	        if (aiEnabled === 'false') return;
+    try {
+        const aiEnabled = await db.getSetting('ai_enabled');
+        if (aiEnabled === 'false') return;
 
-	        const ticket = await db.getTicket(ticketId);
-	        if (ticket && ticket.current_step_id === -1) return;
+        const ticket = await db.getTicket(ticketId);
+        if (ticket && ticket.current_step_id === -1) return;
 
         let collectedData = ticket?.collected_data ? JSON.parse(ticket.collected_data) : {};
         let currentStep = ticket?.current_step_id || 0;
@@ -199,4 +200,13 @@ client.on(Events.MessageCreate, async message => {
     } catch (error) { console.error('Processing error:', error); }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+// Initialize database then login
+(async () => {
+    try {
+        await db.init();
+        await client.login(process.env.DISCORD_TOKEN);
+    } catch (error) {
+        console.error('❌ [FATAL] Startup failed:', error);
+        process.exit(1);
+    }
+})();
