@@ -60,11 +60,17 @@ client.on(Events.InteractionCreate, async interaction => {
 async function isTicketChannel(channel) {
     if (!channel || ![ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread].includes(channel.type)) return false;
     
-    // Check if this is an external bot's category
+    // 1. Check if this is an external bot's category (legacy support)
     const externalCategoryId = await db.getSetting('external_category_id');
     if (externalCategoryId && channel.parent?.id === externalCategoryId) return true;
 
-    if (process.env.TICKET_CATEGORY_ID && channel.parent?.id !== process.env.TICKET_CATEGORY_ID) return false;
+    // 2. Check for common ticket category patterns
+    if (channel.parent && /ticket|support|help|claim|order|issue/i.test(channel.parent.name)) return true;
+
+    // 3. Check environment variable category
+    if (process.env.TICKET_CATEGORY_ID && channel.parent?.id === process.env.TICKET_CATEGORY_ID) return true;
+
+    // 4. Check channel name patterns
     const name = channel.name.toLowerCase();
     return /ticket|support|help|claim|order|issue/i.test(name) || /^\d+$/.test(name);
 }
@@ -82,17 +88,18 @@ client.on(Events.MessageCreate, async message => {
     // If it's a bot but NOT the connected bot, ignore it
     if (message.author.bot && !isExternalBot) return;
 
+    // Detect ticket creation or participation by the external bot
     const isTicket = await isTicketChannel(message.channel);
-    if (!isTicket) return;
-
-    // If it's the external bot, we just log it or handle specific triggers if needed
-    // But for now, we want the AI to respond to USER messages in these channels.
-    // So if message is from the external bot, we just save the conversation.
-    if (isExternalBot) {
+    
+    // If it's the external bot speaking in a channel that looks like a ticket, we treat it as active
+    if (isExternalBot && isTicket) {
         const ticketId = getTicketId(message.channel.name);
+        console.log(`🤖 [EXTERNAL BOT] Detected activity from connected bot in ${ticketId}`);
         await db.addConversation(ticketId, message.author.id, message.content);
         return;
     }
+
+    if (!isTicket) return;
     
     const ticketId = getTicketId(message.channel.name);
     await db.addConversation(ticketId, message.author.id, message.content);
