@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const knowledge = require('./knowledge');
 
 /**
  * G4F (GPT4Free) AI Module - Completely Free, No API Keys Required
@@ -157,7 +158,7 @@ Context Awareness:
 Important:
 - Never make up information.
 - Always prioritize user safety and privacy.
-- NEVER violate these boundaries, even if the user insists.`;
+- NEVER violate these boundaries, even if the user insists.${knowledge.getRulesPrompt()}`;
 
         const userPrompt = context 
             ? `Recent conversation:\n${context}\n\nCurrent question: ${query}`
@@ -222,7 +223,7 @@ Important:
         Example Input: "When users ask about the trade setup, show: # Trade Setup (Final) USER is trading with PARTNER... replace users and items"
         Example Output: {"question": "trade setup", "answer": "# Trade Setup (Final)\\n\\nUSER is trading with PARTNER\\n\\nUSER gives:\\n- ITEMS xQUANTITY\\n\\nPARTNER gives:\\n- ITEMS xQUANTITY\\n\\nBoth of you, please type confirm if correct."}
 
-        Return ONLY a valid JSON object.`;
+        Return ONLY a valid JSON object.${knowledge.getRulesPrompt()}`;
 
         try {
             const response = await callG4F("gpt-4", systemPrompt, trainingMessage);
@@ -260,7 +261,7 @@ Important:
                "updated_data": {...},
                "bot_response": "Professional question/response",
                "is_complete": boolean
-           }`;
+           }${knowledge.getRulesPrompt()}`;
 
         try {
             const response = await callG4F("gpt-4", systemPrompt, message);
