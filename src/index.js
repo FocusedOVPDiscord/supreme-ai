@@ -2,12 +2,20 @@ require('dotenv').config();
 const http = require('http');
 const port = process.env.PORT || 10000;
 
+console.log('🚀 [STARTUP] Initializing Supreme AI...');
+
 // Simple health check server for Koyeb
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot is running\n');
-}).listen(port, () => {
+});
+
+server.listen(port, '0.0.0.0', () => {
     console.log(`✅ [HEALTH CHECK] Listening on port ${port}`);
+});
+
+server.on('error', (err) => {
+    console.error('❌ [HEALTH CHECK ERROR]', err);
 });
 
 const { Client, GatewayIntentBits, Collection, REST, Routes, Events, ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
@@ -16,6 +24,11 @@ const ai = require('./utils/ai');
 const tradeLogic = require('./utils/tradeLogic');
 const formatter = require('./utils/responseFormatter');
 const commandsList = require('./commands');
+
+if (!process.env.DISCORD_TOKEN) {
+    console.error('❌ [FATAL] DISCORD_TOKEN is missing from environment variables!');
+    process.exit(1);
+}
 
 const client = new Client({
     intents: [
@@ -40,6 +53,10 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 async function registerCommands() {
     try {
         console.log('📡 [COMMANDS] Starting auto-registration...');
+        if (!process.env.DISCORD_CLIENT_ID) {
+            console.warn('⚠️ [COMMANDS] DISCORD_CLIENT_ID missing, skipping registration.');
+            return;
+        }
         if (process.env.DISCORD_GUILD_ID) {
             await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: commandsData });
             console.log('✅ [COMMANDS] Guild commands registered!');
@@ -63,7 +80,11 @@ client.on(Events.InteractionCreate, async interaction => {
             await command.execute(interaction);
         } catch (error) {
             console.error(error);
-            await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ content: 'There was an error while executing this command!' });
+            } else {
+                await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+            }
         }
     }
 });
@@ -71,17 +92,13 @@ client.on(Events.InteractionCreate, async interaction => {
 async function isTicketChannel(channel) {
     if (!channel || ![ChannelType.GuildText, ChannelType.PublicThread, ChannelType.PrivateThread].includes(channel.type)) return false;
     
-    // 1. Check if this is an external bot's category (legacy support)
     const externalCategoryId = await db.getSetting('external_category_id');
     if (externalCategoryId && channel.parent?.id === externalCategoryId) return true;
 
-    // 2. Check for common ticket category patterns
     if (channel.parent && /ticket|support|help|claim|order|issue/i.test(channel.parent.name)) return true;
 
-    // 3. Check environment variable category
     if (process.env.TICKET_CATEGORY_ID && channel.parent?.id === process.env.TICKET_CATEGORY_ID) return true;
 
-    // 4. Check channel name patterns
     const name = channel.name.toLowerCase();
     return /ticket|support|help|claim|order|issue/i.test(name) || /^\d+$/.test(name);
 }
@@ -92,39 +109,35 @@ function getTicketId(channelName) {
 }
 
 client.on(Events.MessageCreate, async message => {
-    // Support external bot tickets: if message is from a bot, check if it's the connected bot
-    const externalBotId = await db.getSetting('external_bot_id');
-    const isExternalBot = message.author.bot && externalBotId && message.author.id === externalBotId;
-    
-    // If it's a bot but NOT the connected bot, ignore it
-    if (message.author.bot && !isExternalBot) return;
-
-    // Detect ticket creation or participation by the external bot
-    const isTicket = await isTicketChannel(message.channel);
-    
-    // If it's the external bot speaking in a channel that looks like a ticket, we treat it as active
-    if (isExternalBot && isTicket) {
-        const ticketId = getTicketId(message.channel.name);
-        console.log(`🤖 [EXTERNAL BOT] Detected activity from connected bot in ${ticketId}`);
-        await db.addConversation(ticketId, message.author.id, message.content);
-        return;
-    }
-
-    if (!isTicket) return;
-    
-    const ticketId = getTicketId(message.channel.name);
-    await db.addConversation(ticketId, message.author.id, message.content);
-
-    if (message.member && message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-        const ticket = await db.getTicket(ticketId);
-        if (ticket && ticket.current_step_id !== -1) {
-            await db.updateTicketState(ticketId, -1, {});
-            await message.channel.send('⚠️ AI has been disabled for this ticket. Reason: A staff member has joined the conversation.');
-        }
-        return;
-    }
-    
     try {
+        const externalBotId = await db.getSetting('external_bot_id');
+        const isExternalBot = message.author.bot && externalBotId && message.author.id === externalBotId;
+        
+        if (message.author.bot && !isExternalBot) return;
+
+        const isTicket = await isTicketChannel(message.channel);
+        
+        if (isExternalBot && isTicket) {
+            const ticketId = getTicketId(message.channel.name);
+            console.log(`🤖 [EXTERNAL BOT] Detected activity from connected bot in ${ticketId}`);
+            await db.addConversation(ticketId, message.author.id, message.content);
+            return;
+        }
+
+        if (!isTicket) return;
+        
+        const ticketId = getTicketId(message.channel.name);
+        await db.addConversation(ticketId, message.author.id, message.content);
+
+        if (message.member && message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+            const ticket = await db.getTicket(ticketId);
+            if (ticket && ticket.current_step_id !== -1) {
+                await db.updateTicketState(ticketId, -1, {});
+                await message.channel.send('⚠️ AI has been disabled for this ticket. Reason: A staff member has joined the conversation.');
+            }
+            return;
+        }
+        
         const aiEnabled = await db.getSetting('ai_enabled');
         if (aiEnabled === 'false') return;
 
@@ -134,7 +147,6 @@ client.on(Events.MessageCreate, async message => {
         let collectedData = ticket?.collected_data ? JSON.parse(ticket.collected_data) : {};
         let currentStep = ticket?.current_step_id || 0;
 
-        // 1. Handle Contextual Greeting for existing trades
         const greetings = ['hi', 'hello', 'helo', 'hey', 'yo', 'sup'];
         if (greetings.includes(message.content.toLowerCase().trim()) && currentStep > 0) {
             let greetingResponse = "";
@@ -152,7 +164,6 @@ client.on(Events.MessageCreate, async message => {
             return;
         }
 
-        // 2. Use the SMART AI-driven trade logic
         if (message.content.toLowerCase().includes('trade') || (currentStep > 0 && currentStep < 8)) {
             await message.channel.sendTyping();
             
@@ -174,7 +185,6 @@ client.on(Events.MessageCreate, async message => {
             }
         }
 
-        // 3. Training Match or AI Fallback
         await message.channel.sendTyping();
 
         const trainedMatch = await db.searchSimilar(message.content);
@@ -203,10 +213,21 @@ client.on(Events.MessageCreate, async message => {
 // Initialize database then login
 (async () => {
     try {
+        console.log('📂 [DATABASE] Initializing...');
         await db.init();
+        console.log('🔑 [DISCORD] Logging in...');
         await client.login(process.env.DISCORD_TOKEN);
     } catch (error) {
         console.error('❌ [FATAL] Startup failed:', error);
         process.exit(1);
     }
 })();
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ [UNHANDLED REJECTION]', reason);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('❌ [UNCAUGHT EXCEPTION]', err);
+    process.exit(1);
+});
