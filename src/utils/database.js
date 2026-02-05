@@ -303,6 +303,7 @@ const api = {
           return reject(err);
         }
         try {
+          // 1. Create all tables first
           await exec(`
             CREATE TABLE IF NOT EXISTS training (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -312,9 +313,36 @@ const api = {
                 usage_count INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
-        `);
 
-          // Check and add missing columns for flow features (training table)
+            CREATE TABLE IF NOT EXISTS tickets (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                category TEXT DEFAULT 'general',
+                status TEXT DEFAULT 'open',
+                current_step_id INTEGER DEFAULT 0,
+                collected_data TEXT,
+                ai_resolved INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                message TEXT NOT NULL,
+                is_ai INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
+
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('ai_enabled', 'true');
+          `);
+
+          // 2. Perform migrations (add missing columns if they don't exist)
           const trainingTableInfo = await all("PRAGMA table_info(training)");
           const trainingColumns = trainingTableInfo.map((c) => c.name);
 
@@ -331,7 +359,6 @@ const api = {
             await exec("ALTER TABLE training ADD COLUMN data_point_name TEXT");
           }
 
-          // Check and add missing columns for flow features (tickets table)
           const ticketsTableInfo = await all("PRAGMA table_info(tickets)");
           const ticketsColumns = ticketsTableInfo.map((c) => c.name);
 
@@ -349,35 +376,6 @@ const api = {
             );
             await exec("ALTER TABLE tickets ADD COLUMN collected_data TEXT");
           }
-
-          await exec(`
-		            CREATE TABLE IF NOT EXISTS tickets (
-		                id TEXT PRIMARY KEY,
-		                user_id TEXT NOT NULL,
-		                category TEXT DEFAULT 'general',
-		                status TEXT DEFAULT 'open',
-		                current_step_id INTEGER DEFAULT 0,
-		                collected_data TEXT,
-		                ai_resolved INTEGER DEFAULT 0,
-		                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		            );
-
-		            CREATE TABLE IF NOT EXISTS conversations (
-		                id INTEGER PRIMARY KEY AUTOINCREMENT,
-		                ticket_id TEXT NOT NULL,
-		                user_id TEXT NOT NULL,
-		                message TEXT NOT NULL,
-		                is_ai INTEGER DEFAULT 0,
-		                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		            );
-
-		            CREATE TABLE IF NOT EXISTS settings (
-		                key TEXT PRIMARY KEY,
-		                value TEXT
-		            );
-
-		            INSERT OR IGNORE INTO settings (key, value) VALUES ('ai_enabled', 'true');
-		        `);
 
           console.log(
             "🚀 [DATABASE] Supreme Summary Engine initialized and migrated."
