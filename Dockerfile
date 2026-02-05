@@ -10,15 +10,15 @@ RUN apt-get update && apt-get install -y \
     sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install g4f with essential dependencies
-RUN pip3 install --no-cache-dir -U g4f --break-system-packages
+# Install g4f (removed --break-system-packages for compatibility with older pip)
+RUN pip3 install --no-cache-dir -U g4f
 
 WORKDIR /app
 
 # Copy package files first for better caching
 COPY package*.json ./
 
-# Install dependencies (this will now be clean since node_modules is ignored)
+# Install dependencies
 RUN npm install
 
 # Copy the rest of the application
